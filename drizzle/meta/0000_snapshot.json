@@ -1,0 +1,1457 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "06b8e255-2429-4bec-a4bb-c27027088e89",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "categorias": {
+      "name": "categorias",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activa": {
+          "name": "activa",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "categorias_nombre_unico": {
+          "name": "categorias_nombre_unico",
+          "columns": [
+            "nombre"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "categorias_nombre_no_vacio": {
+          "name": "categorias_nombre_no_vacio",
+          "value": "length(trim(\"nombre\")) > 0"
+        },
+        "categorias_activa_booleano": {
+          "name": "categorias_activa_booleano",
+          "value": "\"activa\" in (0, 1)"
+        }
+      }
+    },
+    "clientes": {
+      "name": "clientes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "tipo_doc": {
+          "name": "tipo_doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nro_doc": {
+          "name": "nro_doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nro_doc_normalizado": {
+          "name": "nro_doc_normalizado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "domicilio": {
+          "name": "domicilio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "telefono": {
+          "name": "telefono",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cuenta_corriente": {
+          "name": "cuenta_corriente",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "limite_credito": {
+          "name": "limite_credito",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "activo": {
+          "name": "activo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "clientes_documento_unico": {
+          "name": "clientes_documento_unico",
+          "columns": [
+            "nro_doc_normalizado",
+            "tipo_doc"
+          ],
+          "isUnique": true
+        },
+        "clientes_nombre_idx": {
+          "name": "clientes_nombre_idx",
+          "columns": [
+            "nombre"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "clientes_tipo_doc_valido": {
+          "name": "clientes_tipo_doc_valido",
+          "value": "\"tipo_doc\" in ('DNI', 'CUIT')"
+        },
+        "clientes_nro_doc_no_vacio": {
+          "name": "clientes_nro_doc_no_vacio",
+          "value": "length(trim(\"nro_doc\")) > 0"
+        },
+        "clientes_nro_doc_normalizado_valido": {
+          "name": "clientes_nro_doc_normalizado_valido",
+          "value": "\"nro_doc_normalizado\" not glob '*[^0-9]*' and (\n        (\"tipo_doc\" = 'DNI' and length(\"nro_doc_normalizado\") between 6 and 8)\n        or (\"tipo_doc\" = 'CUIT' and length(\"nro_doc_normalizado\") = 11)\n      )"
+        },
+        "clientes_nombre_no_vacio": {
+          "name": "clientes_nombre_no_vacio",
+          "value": "length(trim(\"nombre\")) > 0"
+        },
+        "clientes_cuenta_corriente_booleano": {
+          "name": "clientes_cuenta_corriente_booleano",
+          "value": "\"cuenta_corriente\" in (0, 1)"
+        },
+        "clientes_limite_credito_no_negativo": {
+          "name": "clientes_limite_credito_no_negativo",
+          "value": "\"limite_credito\" is null or \"limite_credito\" >= 0"
+        },
+        "clientes_activo_booleano": {
+          "name": "clientes_activo_booleano",
+          "value": "\"activo\" in (0, 1)"
+        }
+      }
+    },
+    "factura_items": {
+      "name": "factura_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "factura_id": {
+          "name": "factura_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "producto_id": {
+          "name": "producto_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "descripcion": {
+          "name": "descripcion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cantidad": {
+          "name": "cantidad",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "precio_unitario": {
+          "name": "precio_unitario",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subtotal": {
+          "name": "subtotal",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "factura_items_factura_producto_unico": {
+          "name": "factura_items_factura_producto_unico",
+          "columns": [
+            "factura_id",
+            "producto_id"
+          ],
+          "isUnique": true
+        },
+        "factura_items_producto_idx": {
+          "name": "factura_items_producto_idx",
+          "columns": [
+            "producto_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "factura_items_factura_id_facturas_id_fk": {
+          "name": "factura_items_factura_id_facturas_id_fk",
+          "tableFrom": "factura_items",
+          "tableTo": "facturas",
+          "columnsFrom": [
+            "factura_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "factura_items_producto_id_productos_id_fk": {
+          "name": "factura_items_producto_id_productos_id_fk",
+          "tableFrom": "factura_items",
+          "tableTo": "productos",
+          "columnsFrom": [
+            "producto_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "factura_items_cantidad_positiva": {
+          "name": "factura_items_cantidad_positiva",
+          "value": "\"cantidad\" > 0"
+        },
+        "factura_items_precio_no_negativo": {
+          "name": "factura_items_precio_no_negativo",
+          "value": "\"precio_unitario\" >= 0"
+        },
+        "factura_items_subtotal_coherente": {
+          "name": "factura_items_subtotal_coherente",
+          "value": "\"subtotal\" = \"cantidad\" * \"precio_unitario\""
+        },
+        "factura_items_descripcion_no_vacia": {
+          "name": "factura_items_descripcion_no_vacia",
+          "value": "length(trim(\"descripcion\")) > 0"
+        }
+      }
+    },
+    "facturas": {
+      "name": "facturas",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "punto_venta": {
+          "name": "punto_venta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "numero": {
+          "name": "numero",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "forma_pago": {
+          "name": "forma_pago",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "comprador_nombre": {
+          "name": "comprador_nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "comprador_tipo_doc": {
+          "name": "comprador_tipo_doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "comprador_nro_doc": {
+          "name": "comprador_nro_doc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "comprador_domicilio": {
+          "name": "comprador_domicilio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "vendedor_id": {
+          "name": "vendedor_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "monto_recibido": {
+          "name": "monto_recibido",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tarjeta_tipo": {
+          "name": "tarjeta_tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tarjeta_marca": {
+          "name": "tarjeta_marca",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "tarjeta_ultimos4": {
+          "name": "tarjeta_ultimos4",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "estado": {
+          "name": "estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'emitida'"
+        },
+        "motivo_anulacion": {
+          "name": "motivo_anulacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fecha_anulacion": {
+          "name": "fecha_anulacion",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "anulada_por_id": {
+          "name": "anulada_por_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "facturas_punto_venta_numero_unico": {
+          "name": "facturas_punto_venta_numero_unico",
+          "columns": [
+            "punto_venta",
+            "numero"
+          ],
+          "isUnique": true
+        },
+        "facturas_fecha_idx": {
+          "name": "facturas_fecha_idx",
+          "columns": [
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "facturas_cliente_fecha_idx": {
+          "name": "facturas_cliente_fecha_idx",
+          "columns": [
+            "cliente_id",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "facturas_vendedor_fecha_idx": {
+          "name": "facturas_vendedor_fecha_idx",
+          "columns": [
+            "vendedor_id",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "facturas_forma_pago_fecha_idx": {
+          "name": "facturas_forma_pago_fecha_idx",
+          "columns": [
+            "forma_pago",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "facturas_estado_fecha_idx": {
+          "name": "facturas_estado_fecha_idx",
+          "columns": [
+            "estado",
+            "fecha"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "facturas_cliente_id_clientes_id_fk": {
+          "name": "facturas_cliente_id_clientes_id_fk",
+          "tableFrom": "facturas",
+          "tableTo": "clientes",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "facturas_vendedor_id_usuarios_id_fk": {
+          "name": "facturas_vendedor_id_usuarios_id_fk",
+          "tableFrom": "facturas",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "vendedor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "facturas_anulada_por_id_usuarios_id_fk": {
+          "name": "facturas_anulada_por_id_usuarios_id_fk",
+          "tableFrom": "facturas",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "anulada_por_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "facturas_punto_venta_valido": {
+          "name": "facturas_punto_venta_valido",
+          "value": "\"punto_venta\" between 1 and 9999"
+        },
+        "facturas_numero_valido": {
+          "name": "facturas_numero_valido",
+          "value": "\"numero\" between 1 and 99999999"
+        },
+        "facturas_total_no_negativo": {
+          "name": "facturas_total_no_negativo",
+          "value": "\"total\" >= 0"
+        },
+        "facturas_forma_pago_valida": {
+          "name": "facturas_forma_pago_valida",
+          "value": "\"forma_pago\" in ('contado', 'tarjeta', 'cuenta_corriente')"
+        },
+        "facturas_estado_valido": {
+          "name": "facturas_estado_valido",
+          "value": "\"estado\" in ('emitida', 'anulada')"
+        },
+        "facturas_comprador_nombre_no_vacio": {
+          "name": "facturas_comprador_nombre_no_vacio",
+          "value": "length(trim(\"comprador_nombre\")) > 0"
+        },
+        "facturas_comprador_tipo_doc_valido": {
+          "name": "facturas_comprador_tipo_doc_valido",
+          "value": "\"comprador_tipo_doc\" is null or \"comprador_tipo_doc\" in ('DNI', 'CUIT')"
+        },
+        "facturas_cuenta_corriente_con_cliente": {
+          "name": "facturas_cuenta_corriente_con_cliente",
+          "value": "\"forma_pago\" <> 'cuenta_corriente' or \"cliente_id\" is not null"
+        },
+        "facturas_monto_recibido_valido": {
+          "name": "facturas_monto_recibido_valido",
+          "value": "(\"forma_pago\" = 'contado' and \"monto_recibido\" is not null and \"monto_recibido\" >= \"total\")\n        or (\"forma_pago\" <> 'contado' and \"monto_recibido\" is null)"
+        },
+        "facturas_tarjeta_valida": {
+          "name": "facturas_tarjeta_valida",
+          "value": "(\"forma_pago\" = 'tarjeta'\n          and \"tarjeta_tipo\" is not null and \"tarjeta_tipo\" in ('debito', 'credito')\n          and \"tarjeta_marca\" is not null and length(trim(\"tarjeta_marca\")) > 0\n          and \"tarjeta_ultimos4\" is not null\n          and \"tarjeta_ultimos4\" glob '[0-9][0-9][0-9][0-9]')\n        or (\"forma_pago\" <> 'tarjeta'\n          and \"tarjeta_tipo\" is null\n          and \"tarjeta_marca\" is null\n          and \"tarjeta_ultimos4\" is null)"
+        },
+        "facturas_anulacion_coherente": {
+          "name": "facturas_anulacion_coherente",
+          "value": "(\"estado\" = 'anulada'\n          and \"motivo_anulacion\" is not null and length(trim(\"motivo_anulacion\")) > 0\n          and \"fecha_anulacion\" is not null\n          and \"anulada_por_id\" is not null)\n        or (\"estado\" = 'emitida'\n          and \"motivo_anulacion\" is null\n          and \"fecha_anulacion\" is null\n          and \"anulada_por_id\" is null)"
+        }
+      }
+    },
+    "movimientos_cuenta": {
+      "name": "movimientos_cuenta",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "importe": {
+          "name": "importe",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "descripcion": {
+          "name": "descripcion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "factura_id": {
+          "name": "factura_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pago_id": {
+          "name": "pago_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "movimientos_cuenta_cliente_fecha_idx": {
+          "name": "movimientos_cuenta_cliente_fecha_idx",
+          "columns": [
+            "cliente_id",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "movimientos_cuenta_factura_tipo_unico": {
+          "name": "movimientos_cuenta_factura_tipo_unico",
+          "columns": [
+            "factura_id",
+            "tipo"
+          ],
+          "isUnique": true
+        },
+        "movimientos_cuenta_pago_unico": {
+          "name": "movimientos_cuenta_pago_unico",
+          "columns": [
+            "pago_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "movimientos_cuenta_cliente_id_clientes_id_fk": {
+          "name": "movimientos_cuenta_cliente_id_clientes_id_fk",
+          "tableFrom": "movimientos_cuenta",
+          "tableTo": "clientes",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "movimientos_cuenta_factura_id_facturas_id_fk": {
+          "name": "movimientos_cuenta_factura_id_facturas_id_fk",
+          "tableFrom": "movimientos_cuenta",
+          "tableTo": "facturas",
+          "columnsFrom": [
+            "factura_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "movimientos_cuenta_pago_id_pagos_id_fk": {
+          "name": "movimientos_cuenta_pago_id_pagos_id_fk",
+          "tableFrom": "movimientos_cuenta",
+          "tableTo": "pagos",
+          "columnsFrom": [
+            "pago_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "movimientos_cuenta_tipo_valido": {
+          "name": "movimientos_cuenta_tipo_valido",
+          "value": "\"tipo\" in ('debito', 'credito')"
+        },
+        "movimientos_cuenta_importe_positivo": {
+          "name": "movimientos_cuenta_importe_positivo",
+          "value": "\"importe\" > 0"
+        },
+        "movimientos_cuenta_descripcion_no_vacia": {
+          "name": "movimientos_cuenta_descripcion_no_vacia",
+          "value": "length(trim(\"descripcion\")) > 0"
+        },
+        "movimientos_cuenta_origen_coherente": {
+          "name": "movimientos_cuenta_origen_coherente",
+          "value": "(\"tipo\" = 'debito' and \"factura_id\" is not null and \"pago_id\" is null)\n        or (\"tipo\" = 'credito'\n          and ((\"factura_id\" is not null and \"pago_id\" is null)\n            or (\"factura_id\" is null and \"pago_id\" is not null)))"
+        }
+      }
+    },
+    "movimientos_stock": {
+      "name": "movimientos_stock",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "producto_id": {
+          "name": "producto_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tipo": {
+          "name": "tipo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cantidad": {
+          "name": "cantidad",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "existencia_resultante": {
+          "name": "existencia_resultante",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "motivo": {
+          "name": "motivo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "observacion": {
+          "name": "observacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "factura_id": {
+          "name": "factura_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "movimientos_stock_producto_fecha_idx": {
+          "name": "movimientos_stock_producto_fecha_idx",
+          "columns": [
+            "producto_id",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "movimientos_stock_tipo_fecha_idx": {
+          "name": "movimientos_stock_tipo_fecha_idx",
+          "columns": [
+            "tipo",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "movimientos_stock_fecha_idx": {
+          "name": "movimientos_stock_fecha_idx",
+          "columns": [
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "movimientos_stock_factura_idx": {
+          "name": "movimientos_stock_factura_idx",
+          "columns": [
+            "factura_id"
+          ],
+          "isUnique": false
+        },
+        "movimientos_stock_usuario_idx": {
+          "name": "movimientos_stock_usuario_idx",
+          "columns": [
+            "usuario_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "movimientos_stock_producto_id_productos_id_fk": {
+          "name": "movimientos_stock_producto_id_productos_id_fk",
+          "tableFrom": "movimientos_stock",
+          "tableTo": "productos",
+          "columnsFrom": [
+            "producto_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "movimientos_stock_usuario_id_usuarios_id_fk": {
+          "name": "movimientos_stock_usuario_id_usuarios_id_fk",
+          "tableFrom": "movimientos_stock",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "movimientos_stock_factura_id_facturas_id_fk": {
+          "name": "movimientos_stock_factura_id_facturas_id_fk",
+          "tableFrom": "movimientos_stock",
+          "tableTo": "facturas",
+          "columnsFrom": [
+            "factura_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "movimientos_stock_tipo_valido": {
+          "name": "movimientos_stock_tipo_valido",
+          "value": "\"tipo\" in ('venta', 'anulacion', 'ingreso', 'egreso')"
+        },
+        "movimientos_stock_signo_coherente": {
+          "name": "movimientos_stock_signo_coherente",
+          "value": "(\"tipo\" in ('venta', 'egreso') and \"cantidad\" < 0)\n        or (\"tipo\" in ('anulacion', 'ingreso') and \"cantidad\" > 0)"
+        },
+        "movimientos_stock_existencia_no_negativa": {
+          "name": "movimientos_stock_existencia_no_negativa",
+          "value": "\"existencia_resultante\" >= 0"
+        },
+        "movimientos_stock_motivo_no_vacio": {
+          "name": "movimientos_stock_motivo_no_vacio",
+          "value": "length(trim(\"motivo\")) > 0"
+        },
+        "movimientos_stock_factura_coherente": {
+          "name": "movimientos_stock_factura_coherente",
+          "value": "(\"tipo\" in ('venta', 'anulacion') and \"factura_id\" is not null)\n        or (\"tipo\" in ('ingreso', 'egreso') and \"factura_id\" is null)"
+        }
+      }
+    },
+    "pagos": {
+      "name": "pagos",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "punto_venta": {
+          "name": "punto_venta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "numero": {
+          "name": "numero",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cliente_id": {
+          "name": "cliente_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fecha": {
+          "name": "fecha",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "importe": {
+          "name": "importe",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "medio": {
+          "name": "medio",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "observacion": {
+          "name": "observacion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "saldo_resultante": {
+          "name": "saldo_resultante",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "pagos_punto_venta_numero_unico": {
+          "name": "pagos_punto_venta_numero_unico",
+          "columns": [
+            "punto_venta",
+            "numero"
+          ],
+          "isUnique": true
+        },
+        "pagos_cliente_fecha_idx": {
+          "name": "pagos_cliente_fecha_idx",
+          "columns": [
+            "cliente_id",
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "pagos_fecha_idx": {
+          "name": "pagos_fecha_idx",
+          "columns": [
+            "fecha"
+          ],
+          "isUnique": false
+        },
+        "pagos_usuario_idx": {
+          "name": "pagos_usuario_idx",
+          "columns": [
+            "usuario_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "pagos_cliente_id_clientes_id_fk": {
+          "name": "pagos_cliente_id_clientes_id_fk",
+          "tableFrom": "pagos",
+          "tableTo": "clientes",
+          "columnsFrom": [
+            "cliente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "pagos_usuario_id_usuarios_id_fk": {
+          "name": "pagos_usuario_id_usuarios_id_fk",
+          "tableFrom": "pagos",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "pagos_punto_venta_valido": {
+          "name": "pagos_punto_venta_valido",
+          "value": "\"punto_venta\" between 1 and 9999"
+        },
+        "pagos_numero_valido": {
+          "name": "pagos_numero_valido",
+          "value": "\"numero\" between 1 and 99999999"
+        },
+        "pagos_importe_positivo": {
+          "name": "pagos_importe_positivo",
+          "value": "\"importe\" > 0"
+        },
+        "pagos_medio_valido": {
+          "name": "pagos_medio_valido",
+          "value": "\"medio\" in ('efectivo', 'transferencia', 'tarjeta_debito')"
+        },
+        "pagos_saldo_resultante_no_negativo": {
+          "name": "pagos_saldo_resultante_no_negativo",
+          "value": "\"saldo_resultante\" >= 0"
+        }
+      }
+    },
+    "productos": {
+      "name": "productos",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "codigo": {
+          "name": "codigo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "descripcion": {
+          "name": "descripcion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "categoria_id": {
+          "name": "categoria_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "precio": {
+          "name": "precio",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "existencia": {
+          "name": "existencia",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "stock_minimo": {
+          "name": "stock_minimo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "activo": {
+          "name": "activo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "productos_codigo_unico": {
+          "name": "productos_codigo_unico",
+          "columns": [
+            "codigo"
+          ],
+          "isUnique": true
+        },
+        "productos_categoria_idx": {
+          "name": "productos_categoria_idx",
+          "columns": [
+            "categoria_id"
+          ],
+          "isUnique": false
+        },
+        "productos_activo_idx": {
+          "name": "productos_activo_idx",
+          "columns": [
+            "activo"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "productos_categoria_id_categorias_id_fk": {
+          "name": "productos_categoria_id_categorias_id_fk",
+          "tableFrom": "productos",
+          "tableTo": "categorias",
+          "columnsFrom": [
+            "categoria_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "productos_codigo_no_vacio": {
+          "name": "productos_codigo_no_vacio",
+          "value": "length(trim(\"codigo\")) > 0"
+        },
+        "productos_descripcion_no_vacia": {
+          "name": "productos_descripcion_no_vacia",
+          "value": "length(trim(\"descripcion\")) > 0"
+        },
+        "productos_precio_no_negativo": {
+          "name": "productos_precio_no_negativo",
+          "value": "\"precio\" >= 0"
+        },
+        "productos_existencia_no_negativa": {
+          "name": "productos_existencia_no_negativa",
+          "value": "\"existencia\" >= 0"
+        },
+        "productos_stock_minimo_no_negativo": {
+          "name": "productos_stock_minimo_no_negativo",
+          "value": "\"stock_minimo\" >= 0"
+        },
+        "productos_activo_booleano": {
+          "name": "productos_activo_booleano",
+          "value": "\"activo\" in (0, 1)"
+        }
+      }
+    },
+    "secuencias": {
+      "name": "secuencias",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "clave": {
+          "name": "clave",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "punto_venta": {
+          "name": "punto_venta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ultimo_numero": {
+          "name": "ultimo_numero",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "actualizado_en": {
+          "name": "actualizado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "secuencias_clave_punto_venta_unico": {
+          "name": "secuencias_clave_punto_venta_unico",
+          "columns": [
+            "clave",
+            "punto_venta"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "secuencias_clave_valida": {
+          "name": "secuencias_clave_valida",
+          "value": "\"clave\" in ('factura', 'recibo')"
+        },
+        "secuencias_punto_venta_valido": {
+          "name": "secuencias_punto_venta_valido",
+          "value": "\"punto_venta\" between 1 and 9999"
+        },
+        "secuencias_ultimo_numero_valido": {
+          "name": "secuencias_ultimo_numero_valido",
+          "value": "\"ultimo_numero\" between 0 and 99999999"
+        }
+      }
+    },
+    "usuarios": {
+      "name": "usuarios",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rol": {
+          "name": "rol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "activo": {
+          "name": "activo",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsec') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "usuarios_email_unico": {
+          "name": "usuarios_email_unico",
+          "columns": [
+            "email"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "usuarios_email_no_vacio": {
+          "name": "usuarios_email_no_vacio",
+          "value": "length(trim(\"email\")) > 0"
+        },
+        "usuarios_nombre_no_vacio": {
+          "name": "usuarios_nombre_no_vacio",
+          "value": "length(trim(\"nombre\")) > 0"
+        },
+        "usuarios_rol_valido": {
+          "name": "usuarios_rol_valido",
+          "value": "\"rol\" in ('admin', 'vendedor')"
+        },
+        "usuarios_activo_booleano": {
+          "name": "usuarios_activo_booleano",
+          "value": "\"activo\" in (0, 1)"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
