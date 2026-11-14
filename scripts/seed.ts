@@ -1,9 +1,16 @@
 /**
  * Carga de datos iniciales (`pnpm run db:seed`).
  *
- * Provisional: todavía no hay tablas del dominio, así que no carga nada.
- * Cuando exista el esquema, aquí se insertarán los datos de prueba usando
- * la conexión centralizada de src/db/index.ts.
+ * PARCIAL: por ahora solo crea los usuarios académicos (un administrador y un
+ * vendedor; ver src/db/semillas/usuarios.ts). Categorías, productos, clientes
+ * y facturas se agregarán en etapas posteriores.
+ *
+ * - Idempotente: se puede ejecutar varias veces sin duplicar datos.
+ * - Usa la base configurada en .env (src/db/config.ts): por defecto, local.db.
+ * - No imprime contraseñas, hashes ni secretos.
+ *
+ * Se ejecuta con la condición `react-server` (ver package.json) para que los
+ * módulos marcados con `import "server-only"` puedan reutilizarse aquí.
  */
 import { existsSync } from "node:fs";
 
@@ -11,4 +18,38 @@ if (existsSync(".env")) {
   process.loadEnvFile(".env");
 }
 
-console.log("db:seed: todavía no hay datos iniciales para cargar. Nada que hacer.");
+async function main() {
+  // Importación diferida: la configuración de la base se lee DESPUÉS de cargar .env.
+  const { cliente, db } = await import("../src/db");
+  const { obtenerConfiguracionBaseDeDatos } = await import("../src/db/config");
+  const { sembrarUsuarios } = await import("../src/db/semillas/usuarios");
+
+  const { tipo } = obtenerConfiguracionBaseDeDatos();
+  console.log(`db:seed: base ${tipo === "local" ? "local (SQLite)" : "remota (Turso)"}.`);
+
+  try {
+    for (const { email, estado } of await sembrarUsuarios(db)) {
+      console.log(`  usuario ${email}: ${estado === "creado" ? "creado" : "ya existía, sin cambios"}`);
+    }
+    console.log("db:seed: terminado.");
+  } finally {
+    cliente.close();
+  }
+}
+
+/**
+ * Mensaje seguro de un error: el de la causa más profunda (el del motor
+ * SQLite, p. ej. «no such table: usuarios»). El mensaje de Drizzle NO se
+ * muestra porque incluye los parámetros de la consulta (entre ellos, el hash).
+ */
+function mensajeSeguro(error: unknown): string {
+  let actual = error;
+  while (actual instanceof Error && actual.cause instanceof Error) actual = actual.cause;
+  const mensaje = actual instanceof Error ? actual.message : String(actual);
+  return mensaje.split("\nparams:")[0];
+}
+
+main().catch((error: unknown) => {
+  console.error("db:seed: error:", mensajeSeguro(error));
+  process.exitCode = 1;
+});

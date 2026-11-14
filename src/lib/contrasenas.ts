@@ -33,6 +33,35 @@ export function verificarContrasena(contrasena: string, hash: string): Promise<b
   return bcrypt.compare(contrasena, hash);
 }
 
+/**
+ * Alfabeto de las contraseñas temporales: letras y dígitos sin los caracteres
+ * que se confunden al dictarlos o copiarlos (0/O, 1/l/I).
+ */
+const ALFABETO_TEMPORAL = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+/** Longitud de la contraseña temporal (≈ 93 bits de entropía con este alfabeto). */
+export const LONGITUD_CONTRASENA_TEMPORAL = 16;
+
+/**
+ * RF-U5: genera una contraseña temporal con el generador criptográfico del
+ * sistema (`crypto.getRandomValues`), nunca con Math.random. Usa muestreo por
+ * rechazo para que todos los caracteres del alfabeto sean equiprobables.
+ * Quien la recibe debe mostrarla una sola vez y no registrarla en el log.
+ */
+export function generarContrasenaTemporal(longitud = LONGITUD_CONTRASENA_TEMPORAL): string {
+  const n = ALFABETO_TEMPORAL.length;
+  // Mayor múltiplo de n que entra en un byte: los bytes por encima se descartan.
+  const limite = 256 - (256 % n);
+  let resultado = "";
+  while (resultado.length < longitud) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(longitud * 2))) {
+      if (byte < limite) resultado += ALFABETO_TEMPORAL[byte % n];
+      if (resultado.length === longitud) break;
+    }
+  }
+  return resultado;
+}
+
 let hashDeRelleno: Promise<string> | undefined;
 
 /**

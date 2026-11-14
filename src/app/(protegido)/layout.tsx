@@ -9,10 +9,12 @@
  * PROVISORIO: barra mínima para probar el flujo. El panel lateral y la barra
  * definitivos (sección 4) se construyen en una etapa posterior.
  */
+import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
 import { BotonCerrarSesion } from "@/components/auth/boton-cerrar-sesion";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
+import { tieneRol } from "@/servicios/permisos";
 
 export default function LayoutProtegido({ children }: { children: ReactNode }) {
   return (
@@ -27,6 +29,11 @@ async function ConSesion({ children }: { children: ReactNode }) {
   return (
     <>
       <header className="flex items-center justify-end gap-4 border-b px-6 py-3 text-sm">
+        {/* Navegación mínima provisoria (el panel lateral llega más adelante). */}
+        <nav className="mr-auto flex gap-4">
+          <Link href="/">Inicio</Link>
+          {tieneRol(usuario, "admin") && <Link href="/usuarios">Usuarios</Link>}
+        </nav>
         <span>
           {usuario.nombre} ({usuario.rol === "admin" ? "Administrador" : "Vendedor"})
         </span>
