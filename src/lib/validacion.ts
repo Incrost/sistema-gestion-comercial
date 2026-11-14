@@ -184,3 +184,35 @@ export const esquemaCuit = z
 export const esquemaUltimos4 = z
   .string()
   .regex(/^\d{4}$/, "Debe tener exactamente 4 dígitos.");
+
+// ---------------------------------------------------------------------------
+// Autenticación (sección 11.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Contraseña ingresada para comprobarla (login o contraseña actual). Solo se
+ * exige que no esté vacía: el mínimo de 8 se aplica al ELEGIR una contraseña.
+ */
+const esquemaContrasenaIngresada = z
+  .string()
+  .min(1, "Es obligatorio.")
+  .max(72, "No puede superar los 72 caracteres.");
+
+/** Cuerpo de POST /api/auth/login (RF-U1). */
+export const esquemaLogin = z.strictObject({
+  email: esquemaEmail,
+  password: esquemaContrasenaIngresada,
+});
+export type DatosLogin = z.infer<typeof esquemaLogin>;
+
+/** Cuerpo de PUT /api/auth/password (RF-U5). */
+export const esquemaCambioContrasena = z
+  .strictObject({
+    actual: esquemaContrasenaIngresada,
+    nueva: esquemaContrasena,
+  })
+  .refine((datos) => datos.nueva !== datos.actual, {
+    path: ["nueva"],
+    message: "Debe ser distinta de la contraseña actual.",
+  });
+export type DatosCambioContrasena = z.infer<typeof esquemaCambioContrasena>;
