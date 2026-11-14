@@ -108,6 +108,10 @@ export const esquemaIdTexto = z
   .transform(Number)
   .pipe(esquemaId);
 
+/** Parámetros de ruta `{ id }` (`/api/productos/{id}`, `/api/categorias/{id}`...). */
+export const esquemaParametrosId = z.strictObject({ id: esquemaIdTexto });
+export type ParametrosId = z.infer<typeof esquemaParametrosId>;
+
 // ---------------------------------------------------------------------------
 // Fechas de filtro (sección 11.1: AAAA-MM-DD, en hora de Argentina)
 // ---------------------------------------------------------------------------

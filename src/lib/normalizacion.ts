@@ -13,6 +13,11 @@ export function normalizarDocumento(valor: string): string {
   return valor.replace(/[.\s-]/g, "");
 }
 
+/** Quita espacios extremos y reduce los internos a uno: "  Pintura   al  agua " → "Pintura al agua". */
+export function normalizarEspacios(valor: string): string {
+  return valor.trim().replace(/\s+/g, " ");
+}
+
 /** Quita espacios extremos y pasa a minúsculas: " Laura@Correo.TEST " → "laura@correo.test". */
 export function normalizarEmail(valor: string): string {
   return valor.trim().toLowerCase();

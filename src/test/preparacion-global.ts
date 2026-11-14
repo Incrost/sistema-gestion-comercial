@@ -16,12 +16,18 @@ export default function preparacionGlobal() {
   return function limpiarBasesDePrueba() {
     for (const nombre of readdirSync(tmpdir())) {
       if (nombre.startsWith(PREFIJO_BASE_PRUEBA)) {
-        rmSync(join(tmpdir(), nombre), {
-          recursive: true,
-          force: true,
-          maxRetries: 10,
-          retryDelay: 100,
-        });
+        try {
+          rmSync(join(tmpdir(), nombre), {
+            recursive: true,
+            force: true,
+            maxRetries: 10,
+            retryDelay: 100,
+          });
+        } catch {
+          // Windows puede retener el archivo unos instantes más después de
+          // que terminan los procesos de prueba. Queda para la próxima
+          // ejecución, que vuelve a recorrer la carpeta temporal.
+        }
       }
     }
   };
