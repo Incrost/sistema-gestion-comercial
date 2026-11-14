@@ -9,11 +9,16 @@ vi.mock("@/db", async () => (await import("@/test/base-de-prueba")).crearModuloD
 
 import * as moduloDb from "@/db";
 import { db } from "@/db";
-import { categorias, productos, usuarios } from "@/db/schema";
+import { categorias, clientes, productos, usuarios } from "@/db/schema";
 import { ApiError } from "@/lib/api-error";
 import type { ModuloDbPrueba } from "@/test/base-de-prueba";
 
-import { esBloqueoDeBase, esViolacionDeUnicidad, traducirUnicidad } from "./errores-base";
+import {
+  COLUMNAS_DOCUMENTO_CLIENTE,
+  esBloqueoDeBase,
+  esViolacionDeUnicidad,
+  traducirUnicidad,
+} from "./errores-base";
 
 afterAll(() => (moduloDb as unknown as ModuloDbPrueba).cerrarBaseDePrueba());
 
@@ -146,6 +151,52 @@ describe("duplicados de productos y categorías (SQLite local)", () => {
     expect(esViolacionDeUnicidad(remoto("productos.codigo"), "productos.codigo")).toBe(true);
     expect(esViolacionDeUnicidad(remoto("categorias.nombre"), "categorias.nombre")).toBe(true);
     expect(esViolacionDeUnicidad(remoto("productos.codigo"), "categorias.nombre")).toBe(false);
+  });
+});
+
+describe("documento de cliente duplicado (índice compuesto)", () => {
+  const cliente = { tipoDoc: "DNI" as const, nroDoc: "28.456.123", nroDocNormalizado: "28456123", nombre: "Ana" };
+
+  it("SQLite local: reconoce el índice completo, no una sola de sus columnas", async () => {
+    await db.insert(clientes).values(cliente);
+    const error = await capturar(db.insert(clientes).values({ ...cliente, nroDoc: "28456123" }));
+    expect(esViolacionDeUnicidad(error, COLUMNAS_DOCUMENTO_CLIENTE)).toBe(true);
+    expect(esViolacionDeUnicidad(error, "clientes.nro_doc_normalizado")).toBe(false);
+    expect(esViolacionDeUnicidad(error, "clientes.tipo_doc")).toBe(false);
+    expect(esViolacionDeUnicidad(error, "usuarios.email")).toBe(false);
+    // Mismo número con otro tipo: no hay choque.
+    await db.insert(clientes).values({ ...cliente, tipoDoc: "CUIT", nroDocNormalizado: "20284561234" });
+  });
+
+  it("SQLite local: un CHECK del documento no se toma por duplicado", async () => {
+    const error = await capturar(
+      db.insert(clientes).values({ ...cliente, nroDocNormalizado: "123", nroDoc: "123" }),
+    );
+    expect(esViolacionDeUnicidad(error, COLUMNAS_DOCUMENTO_CLIENTE)).toBe(false);
+  });
+
+  it("Turso/libSQL remoto: reconoce el mensaje del motor directo o como causa", () => {
+    const remoto = Object.assign(
+      new Error(`SQLITE_CONSTRAINT: SQLite error: UNIQUE constraint failed: ${COLUMNAS_DOCUMENTO_CLIENTE}`),
+      { code: "SQLITE_CONSTRAINT" },
+    );
+    expect(esViolacionDeUnicidad(remoto, COLUMNAS_DOCUMENTO_CLIENTE)).toBe(true);
+    expect(esViolacionDeUnicidad(new Error("Failed query", { cause: remoto }), COLUMNAS_DOCUMENTO_CLIENTE)).toBe(true);
+    // Sin código de restricción, o con otro índice, no es un documento duplicado.
+    expect(esViolacionDeUnicidad(new Error(remoto.message), COLUMNAS_DOCUMENTO_CLIENTE)).toBe(false);
+    const otro = Object.assign(new Error("UNIQUE constraint failed: productos.codigo"), { code: "SQLITE_CONSTRAINT" });
+    expect(esViolacionDeUnicidad(otro, COLUMNAS_DOCUMENTO_CLIENTE)).toBe(false);
+  });
+
+  it("traducirUnicidad() lo convierte en 409 DOCUMENTO_DUPLICADO", async () => {
+    const error = await capturar(db.insert(clientes).values(cliente));
+    let lanzado: unknown;
+    try {
+      traducirUnicidad(error, { [COLUMNAS_DOCUMENTO_CLIENTE]: { code: "DOCUMENTO_DUPLICADO", campo: "nroDoc" } });
+    } catch (e) {
+      lanzado = e;
+    }
+    expect(lanzado).toMatchObject({ status: 409, code: "DOCUMENTO_DUPLICADO", details: [{ campo: "nroDoc" }] });
   });
 });
 

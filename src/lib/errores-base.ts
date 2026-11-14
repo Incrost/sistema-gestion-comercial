@@ -5,7 +5,9 @@
  * convertir el choque con un índice único en un error de negocio preciso:
  * - `usuarios.email`    → 409 EMAIL_DUPLICADO;
  * - `productos.codigo`  → 409 CODIGO_DUPLICADO;
- * - `categorias.nombre` → 409 NOMBRE_DUPLICADO.
+ * - `categorias.nombre` → 409 NOMBRE_DUPLICADO;
+ * - índice compuesto del documento del cliente (`COLUMNAS_DOCUMENTO_CLIENTE`)
+ *                       → 409 DOCUMENTO_DUPLICADO.
  * `esBloqueoDeBase()` reconoce SQLITE_BUSY/SQLITE_LOCKED (otra conexión tiene
  * tomada la escritura); lo usa src/db/transaccion.ts para reintentar el BEGIN.
  * Cualquier otro error de la base NO se reconoce aquí y sigue su camino hasta
@@ -27,6 +29,14 @@ import "server-only";
 
 import { ApiError, type DetalleCampo } from "@/lib/api-error";
 import type { CodigoError } from "@/lib/codigos-error";
+
+/**
+ * Columnas del índice único `clientes_documento_unico` (número normalizado y
+ * tipo de documento), en el orden en que SQLite las informa:
+ * «UNIQUE constraint failed: clientes.nro_doc_normalizado, clientes.tipo_doc».
+ * Deben coincidir ambas: una sola columna NO se toma por duplicado.
+ */
+export const COLUMNAS_DOCUMENTO_CLIENTE = "clientes.nro_doc_normalizado, clientes.tipo_doc";
 
 /** Profundidad máxima de causas a revisar (evita ciclos). */
 const PROFUNDIDAD_MAXIMA = 5;

@@ -5,8 +5,10 @@
  * - los usuarios académicos (un administrador y un vendedor; ver
  *   src/db/semillas/usuarios.ts);
  * - 6 categorías y 30 productos con su stock inicial, cargado como ingreso
- *   mediante los servicios y moverStock() (ver src/db/semillas/catalogo.ts).
- * Clientes, facturas y pagos se agregarán en etapas posteriores.
+ *   mediante los servicios y moverStock() (ver src/db/semillas/catalogo.ts);
+ * - 12 clientes académicos ficticios, uno dado de baja, todos con saldo 0
+ *   (ver src/db/semillas/clientes.ts).
+ * Facturas, pagos y movimientos de cuenta se agregarán en etapas posteriores.
  *
  * - Idempotente: se puede ejecutar varias veces sin duplicar datos.
  * - Usa la base configurada en .env (src/db/config.ts): por defecto, local.db.
@@ -27,6 +29,7 @@ async function main() {
   const { obtenerConfiguracionBaseDeDatos } = await import("../src/db/config");
   const { sembrarUsuarios, USUARIOS_ACADEMICOS } = await import("../src/db/semillas/usuarios");
   const { sembrarCatalogo } = await import("../src/db/semillas/catalogo");
+  const { sembrarClientes } = await import("../src/db/semillas/clientes");
   const { obtenerUsuarioActivo } = await import("../src/servicios/auth");
   const esquema = await import("../src/db/schema");
   const { count, eq } = await import("drizzle-orm");
@@ -59,12 +62,20 @@ async function main() {
     );
     console.log(`  movimientos de stock creados: ${catalogo.movimientosCreados}`);
 
-    const [[cat], [prod], [mov]] = await Promise.all([
+    const semillaClientes = await sembrarClientes(admin);
+    console.log(
+      `  clientes: ${semillaClientes.clientesCreados} creados, ${semillaClientes.clientesExistentes} ya existían`,
+    );
+
+    const [[cat], [prod], [mov], [cli]] = await Promise.all([
       db.select({ n: count() }).from(esquema.categorias),
       db.select({ n: count() }).from(esquema.productos),
       db.select({ n: count() }).from(esquema.movimientosStock),
+      db.select({ n: count() }).from(esquema.clientes),
     ]);
-    console.log(`  totales en la base: ${cat.n} categorías, ${prod.n} productos, ${mov.n} movimientos`);
+    console.log(
+      `  totales en la base: ${cat.n} categorías, ${prod.n} productos, ${mov.n} movimientos, ${cli.n} clientes`,
+    );
     console.log("db:seed: terminado.");
   } finally {
     cliente.close();

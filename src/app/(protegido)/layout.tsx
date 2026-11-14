@@ -34,6 +34,8 @@ async function ConSesion({ children }: { children: ReactNode }) {
           <Link href="/">Inicio</Link>
           <Link href="/productos">Productos</Link>
           <Link href="/productos/categorias">Categorías</Link>
+          <Link href="/clientes">Clientes</Link>
+          <Link href="/clientes/saldos">Saldos</Link>
           {tieneRol(usuario, "admin") && <Link href="/usuarios">Usuarios</Link>}
         </nav>
         <span>
