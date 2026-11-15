@@ -21,12 +21,27 @@
  */
 import { z } from "zod";
 
-import { FORMAS_PAGO, TIPOS_TARJETA, type FormaPago, type TipoTarjeta } from "@/db/schema";
+import {
+  ESTADOS_FACTURA,
+  FORMAS_PAGO,
+  TIPOS_TARJETA,
+  type EstadoFactura,
+  type FormaPago,
+  type TipoTarjeta,
+} from "@/db/schema";
 
 import { normalizarEspacios } from "./normalizacion";
-import { esquemaId, esquemaImportePositivo, esquemaUltimos4 } from "./validacion";
+import {
+  esquemaFechaFiltro,
+  esquemaId,
+  esquemaIdTexto,
+  esquemaImportePositivo,
+  esquemaPaginacion,
+  esquemaParametrosId,
+  esquemaUltimos4,
+} from "./validacion";
 
-export { FORMAS_PAGO, TIPOS_TARJETA, type FormaPago, type TipoTarjeta };
+export { ESTADOS_FACTURA, FORMAS_PAGO, TIPOS_TARJETA, type EstadoFactura, type FormaPago, type TipoTarjeta };
 
 // ---------------------------------------------------------------------------
 // Límites seguros (regla 10)
@@ -70,6 +85,12 @@ export const ETIQUETAS_FORMA_PAGO: Record<FormaPago, string> = {
   contado: "Contado",
   tarjeta: "Tarjeta",
   cuenta_corriente: "Cuenta corriente",
+};
+
+/** Nombre visible de cada estado de factura. */
+export const ETIQUETAS_ESTADO_FACTURA: Record<EstadoFactura, string> = {
+  emitida: "Emitida",
+  anulada: "Anulada",
 };
 
 /** Nombre visible de cada tipo de tarjeta. */
@@ -252,3 +273,96 @@ export const esquemaEmisionFactura = z.strictObject({
 });
 export type DatosEmisionFactura = z.input<typeof esquemaEmisionFactura>;
 export type EmisionFacturaValidada = z.output<typeof esquemaEmisionFactura>;
+
+// ---------------------------------------------------------------------------
+// Consulta — GET /api/facturas (RF-V8) y GET /api/facturas/{id} (RF-V7)
+// ---------------------------------------------------------------------------
+
+/** Longitud máxima del texto de búsqueda del listado. */
+export const BUSQUEDA_FACTURAS_MAXIMA = 100;
+
+/** Convierte "" y null en undefined: un filtro vacío equivale a no filtrar. */
+function vacioComoAusente(valor: unknown): unknown {
+  return valor === "" || valor === null ? undefined : valor;
+}
+
+/**
+ * Parámetros de GET /api/facturas (RF-V8), tal como llegan en la URL:
+ * - `q`: número de factura (completo «0001-00000001» o una parte numérica)
+ *   o nombre CONGELADO del comprador;
+ * - `desde`, `hasta`: días AAAA-MM-DD en hora de Argentina, ambos inclusive;
+ *   `desde` no puede ser posterior a `hasta`;
+ * - `clienteId`, `vendedorId`: enteros positivos (no exigen que el cliente o
+ *   el usuario sigan activos: el historial no se oculta);
+ * - `forma`: contado | tarjeta | cuenta_corriente;
+ * - `estado`: emitida | anulada;
+ * - `page`, `pageSize` (sección 11.1).
+ * Estricto: un parámetro desconocido → 422 VALIDACION.
+ */
+export const esquemaConsultaFacturas = z
+  .strictObject({
+    ...esquemaPaginacion.shape,
+    q: z.preprocess(
+      vacioComoAusente,
+      z
+        .string()
+        .overwrite(normalizarEspacios)
+        .max(BUSQUEDA_FACTURAS_MAXIMA, `No puede superar los ${BUSQUEDA_FACTURAS_MAXIMA} caracteres.`)
+        .optional(),
+    ),
+    desde: z.preprocess(vacioComoAusente, esquemaFechaFiltro.optional()),
+    hasta: z.preprocess(vacioComoAusente, esquemaFechaFiltro.optional()),
+    clienteId: z.preprocess(vacioComoAusente, esquemaIdTexto.optional()),
+    vendedorId: z.preprocess(vacioComoAusente, esquemaIdTexto.optional()),
+    forma: z.preprocess(
+      vacioComoAusente,
+      z.enum(FORMAS_PAGO, { error: "Debe ser «contado», «tarjeta» o «cuenta_corriente»." }).optional(),
+    ),
+    estado: z.preprocess(
+      vacioComoAusente,
+      z.enum(ESTADOS_FACTURA, { error: "Debe ser «emitida» o «anulada»." }).optional(),
+    ),
+  })
+  .refine((d) => !d.desde || !d.hasta || d.desde <= d.hasta, {
+    path: ["hasta"],
+    message: "Debe ser igual o posterior a «desde».",
+  });
+export type ConsultaFacturas = z.infer<typeof esquemaConsultaFacturas>;
+
+/** Parámetros de ruta `{ id }` de /api/facturas/{id} y /api/facturas/{id}/anulacion. */
+export const esquemaParametrosFactura = esquemaParametrosId;
+
+// ---------------------------------------------------------------------------
+// Anulación — POST /api/facturas/{id}/anulacion (RF-V9, regla 5)
+// ---------------------------------------------------------------------------
+
+export const MOTIVO_ANULACION_MINIMO = 5;
+export const MOTIVO_ANULACION_MAXIMO = 200;
+
+const MENSAJE_ANULACION_SERVIDOR =
+  "La anulación solo recibe el motivo: estado, fecha, usuario e importes los decide el servidor.";
+
+/**
+ * Cuerpo de la anulación: EXCLUSIVAMENTE `{ "motivo": "..." }`.
+ * El motivo es obligatorio, se recortan los espacios extremos (y se reducen
+ * los internos) y debe tener entre 5 y 200 caracteres. Cualquier otro campo
+ * → 422 VALIDACION; los que intentan decidir lo que decide el servidor se
+ * rechazan con un mensaje explícito.
+ */
+export const esquemaAnulacionFactura = z.strictObject({
+  motivo: z
+    .string({ error: (issue) => (issue.input == null ? "Es obligatorio." : "Debe ser un texto.") })
+    .overwrite(normalizarEspacios)
+    .min(1, { error: "Es obligatorio.", abort: true })
+    .min(MOTIVO_ANULACION_MINIMO, `Debe tener al menos ${MOTIVO_ANULACION_MINIMO} caracteres.`)
+    .max(MOTIVO_ANULACION_MAXIMO, `No puede superar los ${MOTIVO_ANULACION_MAXIMO} caracteres.`),
+  estado: campoProhibido(MENSAJE_ANULACION_SERVIDOR),
+  usuarioId: campoProhibido("El usuario que anula es el de la sesión."),
+  anuladaPorId: campoProhibido("El usuario que anula es el de la sesión."),
+  fecha: campoProhibido("La fecha y hora de la anulación las registra el servidor."),
+  fechaAnulacion: campoProhibido("La fecha y hora de la anulación las registra el servidor."),
+  total: campoProhibido(MENSAJE_ANULACION_SERVIDOR),
+  items: campoProhibido("La anulación reingresa todos los renglones: no se eligen ítems."),
+  clienteId: campoProhibido(MENSAJE_ANULACION_SERVIDOR),
+});
+export type DatosAnulacionFactura = z.input<typeof esquemaAnulacionFactura>;

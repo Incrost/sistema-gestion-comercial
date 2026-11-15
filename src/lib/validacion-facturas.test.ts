@@ -7,10 +7,15 @@ import { describe, expect, it } from "vitest";
 import { errorDeValidacion, type DetalleCampo } from "./api-error";
 import {
   CANTIDAD_MAXIMA_POR_RENGLON,
+  esquemaAnulacionFactura,
+  esquemaConsultaFacturas,
   esquemaEmisionFactura,
   esquemaMarcaTarjeta,
+  esquemaParametrosFactura,
   IMPORTE_MAXIMO_FACTURA,
   MARCA_TARJETA_MAXIMA,
+  MOTIVO_ANULACION_MAXIMO,
+  MOTIVO_ANULACION_MINIMO,
   RENGLONES_MAXIMOS,
 } from "./validacion-facturas";
 
@@ -235,5 +240,99 @@ describe("tarjeta (regla 9)", () => {
     expect(esquemaMarcaTarjeta.safeParse("Visa 1234").success).toBe(false);
     expect(esquemaMarcaTarjeta.safeParse("Cabal 24").success).toBe(true);
     expect(esquemaMarcaTarjeta.parse("  Tarjeta   Naranja ")).toBe("Tarjeta Naranja");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Consulta y anulación (RF-V7, RF-V8, RF-V9)
+// ---------------------------------------------------------------------------
+
+/** Detalles por campo de un esquema cualquiera (o [] si es válido). */
+function detallesDe(esquema: { safeParse: (d: unknown) => { success: boolean; error?: unknown } }, datos: unknown): DetalleCampo[] {
+  const resultado = esquema.safeParse(datos);
+  if (resultado.success) return [];
+  return errorDeValidacion(resultado.error as Parameters<typeof errorDeValidacion>[0]).details as DetalleCampo[];
+}
+
+describe("esquemaConsultaFacturas", () => {
+  it("valores por defecto y conversión de los parámetros de la URL", () => {
+    expect(esquemaConsultaFacturas.parse({})).toEqual({ page: 1, pageSize: 20 });
+    expect(
+      esquemaConsultaFacturas.parse({
+        q: "  Mariana   López ",
+        desde: "2026-10-01",
+        hasta: "2026-10-31",
+        clienteId: "4",
+        vendedorId: "2",
+        forma: "cuenta_corriente",
+        estado: "anulada",
+        page: "3",
+        pageSize: "100",
+      }),
+    ).toEqual({
+      q: "Mariana López",
+      desde: "2026-10-01",
+      hasta: "2026-10-31",
+      clienteId: 4,
+      vendedorId: 2,
+      forma: "cuenta_corriente",
+      estado: "anulada",
+      page: 3,
+      pageSize: 100,
+    });
+    // Vacíos = sin filtro.
+    expect(esquemaConsultaFacturas.parse({ q: "", forma: "", estado: "", clienteId: "", desde: "" })).toEqual({ page: 1, pageSize: 20 });
+  });
+
+  it("rechaza parámetros desconocidos, rangos invertidos y valores fuera de lista", () => {
+    expect(detallesDe(esquemaConsultaFacturas, { orden: "total" })).toEqual([{ campo: "orden", mensaje: "Campo no permitido." }]);
+    expect(detallesDe(esquemaConsultaFacturas, { desde: "2026-10-02", hasta: "2026-10-01" })).toEqual([
+      { campo: "hasta", mensaje: "Debe ser igual o posterior a «desde»." },
+    ]);
+    expect(detallesDe(esquemaConsultaFacturas, { desde: "2026-10-01", hasta: "2026-10-01" })).toEqual([]);
+    for (const consulta of [
+      { forma: "efectivo" },
+      { estado: "borrada" },
+      { clienteId: "0" },
+      { vendedorId: "-1" },
+      { clienteId: "x" },
+      { desde: "2026-13-01" },
+      { pageSize: "101" },
+      { page: "0" },
+      { q: "x".repeat(101) },
+    ]) {
+      expect(detallesDe(esquemaConsultaFacturas, consulta).map((d) => d.campo)).toEqual(Object.keys(consulta));
+    }
+  });
+});
+
+describe("esquemaParametrosFactura", () => {
+  it("id entero positivo como texto; estricto", () => {
+    expect(esquemaParametrosFactura.parse({ id: "12" })).toEqual({ id: 12 });
+    for (const id of ["0", "-1", "1.5", "abc", "", "proximo-numero"]) {
+      expect(esquemaParametrosFactura.safeParse({ id }).success).toBe(false);
+    }
+    expect(esquemaParametrosFactura.safeParse({ id: "1", otro: "2" }).success).toBe(false);
+  });
+});
+
+describe("esquemaAnulacionFactura", () => {
+  it("motivo obligatorio, recortado y con longitud acotada", () => {
+    expect(esquemaAnulacionFactura.parse({ motivo: "  Error en la   carga  " })).toEqual({ motivo: "Error en la carga" });
+    expect(esquemaAnulacionFactura.parse({ motivo: "x".repeat(MOTIVO_ANULACION_MINIMO) }).motivo).toHaveLength(MOTIVO_ANULACION_MINIMO);
+    expect(esquemaAnulacionFactura.parse({ motivo: "x".repeat(MOTIVO_ANULACION_MAXIMO) }).motivo).toHaveLength(MOTIVO_ANULACION_MAXIMO);
+    expect(detallesDe(esquemaAnulacionFactura, {})).toEqual([{ campo: "motivo", mensaje: "Es obligatorio." }]);
+    expect(detallesDe(esquemaAnulacionFactura, { motivo: "   " })).toEqual([{ campo: "motivo", mensaje: "Es obligatorio." }]);
+    expect(detallesDe(esquemaAnulacionFactura, { motivo: 5 })).toEqual([{ campo: "motivo", mensaje: "Debe ser un texto." }]);
+    expect(detallesDe(esquemaAnulacionFactura, { motivo: "x".repeat(MOTIVO_ANULACION_MINIMO - 1) })).toEqual([
+      { campo: "motivo", mensaje: `Debe tener al menos ${MOTIVO_ANULACION_MINIMO} caracteres.` },
+    ]);
+    expect(detallesDe(esquemaAnulacionFactura, { motivo: "x".repeat(MOTIVO_ANULACION_MAXIMO + 1) })).toHaveLength(1);
+  });
+
+  it("acepta EXCLUSIVAMENTE el motivo", () => {
+    for (const campo of ["estado", "usuarioId", "anuladaPorId", "fecha", "fechaAnulacion", "total", "items", "clienteId", "otro"]) {
+      expect(detallesDe(esquemaAnulacionFactura, { motivo: "Motivo válido", [campo]: "x" }).map((d) => d.campo)).toEqual([campo]);
+    }
   });
 });

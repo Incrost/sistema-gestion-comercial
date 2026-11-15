@@ -229,9 +229,9 @@ describe("sesión, métodos y arquitectura", () => {
     await esperarError(await proximo(cookie), 401, "NO_AUTENTICADO");
   });
 
-  it("solo existen POST /api/facturas y GET /api/facturas/proximo-numero (sin DELETE)", () => {
-    const metodos = (modulo: object) => Object.keys(modulo).filter((m) => /^[A-Z]+$/.test(m));
-    expect(metodos(rutaFacturas)).toEqual(["POST"]);
+  it("/api/facturas solo exporta GET y POST; proximo-numero solo GET (sin DELETE)", () => {
+    const metodos = (modulo: object) => Object.keys(modulo).filter((m) => /^[A-Z]+$/.test(m)).sort();
+    expect(metodos(rutaFacturas)).toEqual(["GET", "POST"]);
     expect(metodos(rutaProximo)).toEqual(["GET"]);
     expect("DELETE" in rutaFacturas).toBe(false);
     expect("DELETE" in rutaProximo).toBe(false);

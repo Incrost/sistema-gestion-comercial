@@ -265,8 +265,9 @@ export type DatosMovimientoCuenta = {
  * - regla 8: un crédito no puede superar el saldo (no hay saldos a favor).
  *   El control y la inserción ocurren en la misma transacción de escritura,
  *   así que ningún otro movimiento puede colarse entre ambos.
- *   (Decisión C1 pendiente: la anulación de una factura a cuenta ya pagada
- *   tendría que resolverse AQUÍ, en un único lugar.)
+ *   (Decisión C1, temporal: la anulación de una factura a cuenta ya pagada
+ *   se RECHAZA antes de llegar aquí, en exigirAnulacionSinSaldoAFavor() de
+ *   src/servicios/facturas.ts. Este control queda como última barrera.)
  *
  * Devuelve el id del movimiento y el saldo del cliente después de grabarlo.
  */

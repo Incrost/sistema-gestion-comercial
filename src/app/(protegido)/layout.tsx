@@ -32,6 +32,7 @@ async function ConSesion({ children }: { children: ReactNode }) {
         {/* Navegación mínima provisoria (el panel lateral llega más adelante). */}
         <nav className="mr-auto flex gap-4">
           <Link href="/">Inicio</Link>
+          <Link href="/ventas">Ventas</Link>
           <Link href="/productos">Productos</Link>
           <Link href="/productos/categorias">Categorías</Link>
           <Link href="/clientes">Clientes</Link>

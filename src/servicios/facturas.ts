@@ -1,6 +1,9 @@
 /**
- * Servicio de facturación: emisión de facturas (RF-V1 a RF-V6; reglas 1, 2,
- * 3, 4, 6, 7, 9, 10 y 11; sección 11.6).
+ * Servicio de facturación (sección 11.6):
+ * - emisión de facturas (RF-V1 a RF-V6; reglas 1, 2, 3, 4, 6, 7, 9, 10 y 11);
+ * - consulta de una factura para el comprobante (RF-V7; reglas 3 y 11);
+ * - listado con filtros, búsqueda y paginado (RF-V8);
+ * - anulación (RF-V9; reglas 2, 5, 7 y 11; decisión temporal C1).
  *
  * No conoce HTTP ni cookies: lo usan los Route Handlers de /api/facturas y lo
  * usarán la pantalla de Nueva venta y el script de datos iniciales.
@@ -32,17 +35,23 @@
  * STOCK_INSUFICIENTE sin consumir número. Además, el UPDATE condicional de
  * moverStock() (`WHERE existencia >= ?`) sigue siendo la barrera definitiva.
  *
+ * Anular también es UNA transacción (RF-V9, regla 5): estado y datos de
+ * anulación, reingreso de stock (un movimiento de anulación por renglón) y,
+ * si fue a cuenta corriente, el crédito por el total. Ver anularFactura().
+ *
  * Este módulo NUNCA modifica `productos.existencia` ni escribe
- * movimientos_cuenta por su cuenta: delega en moverStock() y registrarDebito().
+ * movimientos_cuenta por su cuenta: delega en moverStock(), registrarDebito()
+ * y registrarCredito().
  *
  * Solo servidor.
  */
 import "server-only";
 
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { NUMERACION } from "@/config/comercio";
-import { MOTIVO_VENTA } from "@/config/motivos-stock";
+import { MOTIVO_ANULACION, MOTIVO_VENTA } from "@/config/motivos-stock";
 import { db } from "@/db";
 import {
   clientes,
@@ -57,9 +66,14 @@ import {
 } from "@/db/schema";
 import { enTransaccion, type Conexion, type Transaccion } from "@/db/transaccion";
 import { ApiError } from "@/lib/api-error";
+import { inicioDelDiaEnArgentina, inicioDelDiaSiguienteEnArgentina } from "@/lib/fechas";
 import { formatearNumeroFactura } from "@/lib/formatos";
+import { desplazamiento, type ListaPaginada } from "@/lib/paginacion";
 import {
+  esquemaAnulacionFactura,
+  esquemaConsultaFacturas,
   esquemaEmisionFactura,
+  esquemaParametrosFactura,
   IMPORTE_MAXIMO_FACTURA,
   NOMBRE_CONSUMIDOR_FINAL,
   type DatosPagoFactura,
@@ -68,7 +82,7 @@ import {
 } from "@/lib/validacion-facturas";
 
 import type { UsuarioAutenticado } from "./auth";
-import { exigirClienteDeCuenta, obtenerSaldo, registrarDebito } from "./cuenta-corriente";
+import { exigirClienteDeCuenta, obtenerSaldo, registrarCredito, registrarDebito } from "./cuenta-corriente";
 import { asignarNumero, consultarProximoNumero as proximoNumeroDelTalonario } from "./numeracion";
 import { exigirRol } from "./permisos";
 import { moverStock } from "./stock";
@@ -115,12 +129,52 @@ export type FacturaPublica = {
   items: ItemFacturaPublico[];
   total: number; // centavos
   pago: PagoFacturaPublico;
-  /** Solo en ventas a cuenta corriente: saldo del cliente después del débito. */
+  /**
+   * Solo en la RESPUESTA DE EMISIÓN de una venta a cuenta corriente: saldo
+   * del cliente después del débito. NO se guarda en la factura, así que
+   * GET /api/facturas/{id} lo OMITE (no se inventa un saldo histórico ni se
+   * muestra el saldo actual como si fuera el de la venta).
+   */
   saldoCliente?: number;
+  /** Solo si la factura está anulada (RF-V9): fecha, usuario y motivo. */
+  anulacion?: AnulacionPublica;
 };
 
-/** Columnas de la factura que se leen para la forma pública (lista blanca). */
-const columnasFactura = {
+/** Datos de la anulación (RF-V9, regla 11: usuario y fecha y hora). */
+export type AnulacionPublica = {
+  fecha: string; // ISO 8601 UTC
+  usuario: { id: number; nombre: string };
+  motivo: string;
+};
+
+/**
+ * Renglón del listado (RF-V8): encabezado de la factura SIN sus ítems.
+ * Comprador y vendedor con los mismos datos y la misma forma que el detalle.
+ */
+export type FacturaResumenPublica = {
+  id: number;
+  puntoVenta: number;
+  numero: number;
+  numeroFormateado: string;
+  fecha: string; // ISO 8601 UTC
+  estado: EstadoFactura;
+  cliente: CompradorPublico | null; // null = consumidor final
+  vendedor: { id: number; nombre: string };
+  formaPago: FormaPago;
+  total: number; // centavos
+};
+
+/** Respuesta de GET /api/facturas: paginación + suma de las emitidas del filtro. */
+export type ListaFacturas = ListaPaginada<FacturaResumenPublica> & {
+  /** Suma de `total` de las facturas EMITIDAS que cumplen el filtro (centavos). */
+  totalEmitido: number;
+};
+
+/** Usuario que anuló la factura (segunda referencia a `usuarios`). */
+const anulador = alias(usuarios, "anulador");
+
+/** Columnas del encabezado: comunes al detalle y al listado (lista blanca). */
+const columnasEncabezado = {
   id: facturas.id,
   puntoVenta: facturas.puntoVenta,
   numero: facturas.numero,
@@ -135,13 +189,9 @@ const columnasFactura = {
   compradorDomicilio: facturas.compradorDomicilio,
   vendedorId: usuarios.id,
   vendedorNombre: usuarios.nombre,
-  montoRecibido: facturas.montoRecibido,
-  tarjetaTipo: facturas.tarjetaTipo,
-  tarjetaMarca: facturas.tarjetaMarca,
-  tarjetaUltimos4: facturas.tarjetaUltimos4,
 };
 
-type FilaFactura = {
+type FilaEncabezado = {
   id: number;
   puntoVenta: number;
   numero: number;
@@ -156,10 +206,62 @@ type FilaFactura = {
   compradorDomicilio: string | null;
   vendedorId: number;
   vendedorNombre: string;
+};
+
+/**
+ * Regla 3, D4: comprador CONGELADO en la factura (nunca se lee de `clientes`).
+ * null = consumidor final.
+ */
+function aCompradorPublico(fila: FilaEncabezado): CompradorPublico | null {
+  return fila.clienteId === null
+    ? null
+    : {
+        id: fila.clienteId,
+        nombre: fila.compradorNombre,
+        tipoDoc: fila.compradorTipoDoc,
+        nroDoc: fila.compradorNroDoc,
+        domicilio: fila.compradorDomicilio,
+      };
+}
+
+/** RF-V8: renglón del listado a partir del encabezado. */
+function aFacturaResumen(fila: FilaEncabezado): FacturaResumenPublica {
+  return {
+    id: fila.id,
+    puntoVenta: fila.puntoVenta,
+    numero: fila.numero,
+    numeroFormateado: formatearNumeroFactura(fila.puntoVenta, fila.numero),
+    fecha: fila.fecha.toISOString(),
+    estado: fila.estado,
+    cliente: aCompradorPublico(fila),
+    vendedor: { id: fila.vendedorId, nombre: fila.vendedorNombre },
+    formaPago: fila.formaPago,
+    total: fila.total,
+  };
+}
+
+/** Columnas de la factura que se leen para la forma pública completa (lista blanca). */
+const columnasFactura = {
+  ...columnasEncabezado,
+  montoRecibido: facturas.montoRecibido,
+  tarjetaTipo: facturas.tarjetaTipo,
+  tarjetaMarca: facturas.tarjetaMarca,
+  tarjetaUltimos4: facturas.tarjetaUltimos4,
+  motivoAnulacion: facturas.motivoAnulacion,
+  fechaAnulacion: facturas.fechaAnulacion,
+  anuladorId: anulador.id,
+  anuladorNombre: anulador.nombre,
+};
+
+type FilaFactura = FilaEncabezado & {
   montoRecibido: number | null;
   tarjetaTipo: TipoTarjeta | null;
   tarjetaMarca: string | null;
   tarjetaUltimos4: string | null;
+  motivoAnulacion: string | null;
+  fechaAnulacion: Date | null;
+  anuladorId: number | null;
+  anuladorNombre: string | null;
 };
 
 /** Valor que las restricciones CHECK garantizan presente para esta forma de pago. */
@@ -189,46 +291,52 @@ function aPagoPublico(fila: FilaFactura): PagoFacturaPublico {
   }
 }
 
-/**
- * Única conversión de una factura guardada a su forma pública. Usa SOLO los
- * datos congelados en la factura y sus renglones: si después cambian el
- * cliente o el catálogo, la factura se sigue mostrando igual (regla 3, D4).
- */
-export function aFacturaPublica(fila: FilaFactura, items: ItemFacturaPublico[]): FacturaPublica {
+/** RF-V9: datos de la anulación; null si la factura sigue emitida. */
+function aAnulacionPublica(fila: FilaFactura): AnulacionPublica | null {
+  if (fila.estado !== "anulada") return null;
   return {
-    id: fila.id,
-    puntoVenta: fila.puntoVenta,
-    numero: fila.numero,
-    numeroFormateado: formatearNumeroFactura(fila.puntoVenta, fila.numero),
-    fecha: fila.fecha.toISOString(),
-    estado: fila.estado,
-    cliente:
-      fila.clienteId === null
-        ? null
-        : {
-            id: fila.clienteId,
-            nombre: fila.compradorNombre,
-            tipoDoc: fila.compradorTipoDoc,
-            nroDoc: fila.compradorNroDoc,
-            domicilio: fila.compradorDomicilio,
-          },
-    vendedor: { id: fila.vendedorId, nombre: fila.vendedorNombre },
-    items,
-    total: fila.total,
-    pago: aPagoPublico(fila),
+    fecha: requerido(fila.fechaAnulacion, "fecha_anulacion").toISOString(),
+    usuario: { id: requerido(fila.anuladorId, "anulada_por_id"), nombre: requerido(fila.anuladorNombre, "anulada_por_id") },
+    motivo: requerido(fila.motivoAnulacion, "motivo_anulacion"),
   };
 }
 
 /**
- * Lee una factura con su vendedor y sus renglones (en el orden en que se
- * cargaron) y la lleva a la forma pública. null si no existe.
- * La reutilizará GET /api/facturas/{id}.
+ * Única conversión de una factura guardada a su forma pública (RF-V7). La
+ * usan la emisión, GET /api/facturas/{id} y la anulación. Usa SOLO los datos
+ * congelados en la factura y sus renglones: si después cambian el cliente o
+ * el catálogo, la factura se sigue mostrando igual (regla 3, D4).
+ */
+export function aFacturaPublica(fila: FilaFactura, items: ItemFacturaPublico[]): FacturaPublica {
+  const resumen = aFacturaResumen(fila);
+  const anulacion = aAnulacionPublica(fila);
+  return {
+    id: resumen.id,
+    puntoVenta: resumen.puntoVenta,
+    numero: resumen.numero,
+    numeroFormateado: resumen.numeroFormateado,
+    fecha: resumen.fecha,
+    estado: resumen.estado,
+    cliente: resumen.cliente,
+    vendedor: resumen.vendedor,
+    items,
+    total: resumen.total,
+    pago: aPagoPublico(fila),
+    ...(anulacion && { anulacion }),
+  };
+}
+
+/**
+ * Lee una factura con su vendedor, su anulación (si la hay) y sus renglones
+ * (en el orden en que se cargaron) y la lleva a la forma pública. null si no
+ * existe. La usan emitirFactura(), obtenerFactura() y anularFactura().
  */
 export async function buscarFacturaPublica(conexion: Conexion, id: number): Promise<FacturaPublica | null> {
   const [fila] = await conexion
     .select(columnasFactura)
     .from(facturas)
     .innerJoin(usuarios, eq(facturas.vendedorId, usuarios.id))
+    .leftJoin(anulador, eq(facturas.anuladaPorId, anulador.id))
     .where(eq(facturas.id, id))
     .limit(1);
   if (!fila) return null;
@@ -655,4 +763,308 @@ export async function consultarProximoNumero(usuario: UsuarioAutenticado): Promi
   const { puntoVenta } = NUMERACION.factura;
   const numero = await proximoNumeroDelTalonario(db, NUMERACION.factura);
   return { numeroFormateado: formatearNumeroFactura(puntoVenta, numero) };
+}
+
+// ---------------------------------------------------------------------------
+// RF-V8 — listado de facturas
+// ---------------------------------------------------------------------------
+
+/** Escapa los comodines de LIKE para buscar el texto literal. */
+function patronContiene(texto: string): string {
+  return `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+/**
+ * Búsqueda `q` del listado (RF-V8). Coincide si se cumple alguna de:
+ * - nombre CONGELADO del comprador contiene el texto (sin distinguir
+ *   mayúsculas; «Consumidor final» también es un nombre congelado);
+ * - número completo: «0001-00000123», «1-123» o «000100000123» (12 dígitos)
+ *   → punto de venta y número exactos;
+ * - parte numérica (1 a 8 dígitos): el número, escrito con sus 8 dígitos,
+ *   contiene esos dígitos («123» encuentra 00000123 y 00001234).
+ */
+function condicionBusqueda(q: string): SQL {
+  const condiciones: SQL[] = [
+    sql`lower(${facturas.compradorNombre}) like ${patronContiene(q.toLowerCase())} escape '\\'`,
+  ];
+  const completo = /^(\d{1,4})-(\d{1,8})$/.exec(q) ?? /^(\d{4})(\d{8})$/.exec(q);
+  if (completo) {
+    condiciones.push(and(eq(facturas.puntoVenta, Number(completo[1])), eq(facturas.numero, Number(completo[2])))!);
+  } else if (/^\d{1,8}$/.test(q)) {
+    condiciones.push(sql`printf('%08d', ${facturas.numero}) like ${patronContiene(q)} escape '\\'`);
+  }
+  return or(...condiciones)!;
+}
+
+/** Regla 10: suma en centavos de las facturas EMITIDAS del filtro (las anuladas no cuentan). */
+const sumaEmitida = sql<number>`coalesce(sum(case when ${facturas.estado} = 'emitida' then ${facturas.total} else 0 end), 0)`.mapWith(
+  Number,
+);
+
+/**
+ * RF-V8: listado de facturas, de la más nueva a la más vieja (a igual fecha,
+ * por id descendente: orden estable), paginado y SIN renglones. Ambos roles.
+ *
+ * Filtros (todos combinables): `q`, `desde`, `hasta` (días de Argentina,
+ * inclusive), `clienteId`, `vendedorId` (aunque el cliente o el usuario estén
+ * inactivos), `forma` y `estado`.
+ *
+ * Responde `{ data, page, pageSize, total, totalEmitido }`; `totalEmitido`
+ * suma solo las emitidas que cumplen TODOS los filtros.
+ */
+export async function listarFacturas(usuario: UsuarioAutenticado, consulta: unknown): Promise<ListaFacturas> {
+  // 1. Validar.
+  const { q, desde, hasta, clienteId, vendedorId, forma, estado, page, pageSize } =
+    esquemaConsultaFacturas.parse(consulta);
+  // 2. Permiso: ambos roles consultan facturas (sección 3).
+  exigirRol(usuario, "admin", "vendedor");
+
+  // 3. Reglas: armar el filtro.
+  const condiciones: SQL[] = [];
+  if (q) condiciones.push(condicionBusqueda(q));
+  if (desde) condiciones.push(gte(facturas.fecha, inicioDelDiaEnArgentina(desde)));
+  if (hasta) condiciones.push(lt(facturas.fecha, inicioDelDiaSiguienteEnArgentina(hasta)));
+  if (clienteId !== undefined) condiciones.push(eq(facturas.clienteId, clienteId));
+  if (vendedorId !== undefined) condiciones.push(eq(facturas.vendedorId, vendedorId));
+  if (forma !== undefined) condiciones.push(eq(facturas.formaPago, forma));
+  if (estado !== undefined) condiciones.push(eq(facturas.estado, estado));
+  const filtro = condiciones.length > 0 ? and(...condiciones) : undefined;
+
+  // 4. Base: una página de encabezados (sin factura_items) y los totales.
+  const [filas, [totales]] = await Promise.all([
+    db
+      .select(columnasEncabezado)
+      .from(facturas)
+      .innerJoin(usuarios, eq(facturas.vendedorId, usuarios.id))
+      .where(filtro)
+      .orderBy(desc(facturas.fecha), desc(facturas.id))
+      .limit(pageSize)
+      .offset(desplazamiento({ page, pageSize })),
+    db.select({ total: count(), totalEmitido: sumaEmitida }).from(facturas).where(filtro),
+  ]);
+
+  // 5. Forma pública.
+  return {
+    data: filas.map(aFacturaResumen),
+    page,
+    pageSize,
+    total: totales.total,
+    totalEmitido: totales.totalEmitido,
+  };
+}
+
+/** Opción de un filtro del listado: `{ id, nombre }`. */
+export type OpcionFiltro = { id: number; nombre: string };
+
+/**
+ * RF-V8 (apoyo de la pantalla /ventas): clientes y vendedores que figuran en
+ * alguna factura, para llenar los filtros. Incluye inactivos, porque el
+ * historial no se oculta. Ambos roles.
+ */
+export async function opcionesFiltroFacturas(
+  usuario: UsuarioAutenticado,
+): Promise<{ clientes: OpcionFiltro[]; vendedores: OpcionFiltro[] }> {
+  exigirRol(usuario, "admin", "vendedor");
+  const [clientesConFacturas, vendedores] = await Promise.all([
+    db
+      .selectDistinct({ id: clientes.id, nombre: clientes.nombre })
+      .from(facturas)
+      .innerJoin(clientes, eq(facturas.clienteId, clientes.id))
+      .orderBy(asc(clientes.nombre), asc(clientes.id)),
+    db
+      .selectDistinct({ id: usuarios.id, nombre: usuarios.nombre })
+      .from(facturas)
+      .innerJoin(usuarios, eq(facturas.vendedorId, usuarios.id))
+      .orderBy(asc(usuarios.nombre), asc(usuarios.id)),
+  ]);
+  return { clientes: clientesConFacturas, vendedores };
+}
+
+// ---------------------------------------------------------------------------
+// RF-V7 — consulta de una factura (comprobante)
+// ---------------------------------------------------------------------------
+
+/**
+ * RF-V7: la factura completa, con la misma forma que la respuesta de emisión
+ * (reglas 3 y 11: datos congelados, vendedor y fecha). Si está anulada,
+ * agrega `anulacion` con fecha, usuario y motivo. Ambos roles.
+ *
+ * `saldoCliente` se OMITE: no se guarda en la factura y no se inventa un
+ * saldo histórico (el saldo actual se consulta en la cuenta corriente).
+ * Inexistente → 404 NO_ENCONTRADO.
+ */
+export async function obtenerFactura(usuario: UsuarioAutenticado, parametros: unknown): Promise<FacturaPublica> {
+  // 1. Validar.
+  const { id } = esquemaParametrosFactura.parse(parametros);
+  // 2. Permiso.
+  exigirRol(usuario, "admin", "vendedor");
+  // 3-5. Base y forma pública.
+  const factura = await buscarFacturaPublica(db, id);
+  if (!factura) throw ApiError.desdeCodigo("NO_ENCONTRADO", "La factura no existe.");
+  return factura;
+}
+
+// ---------------------------------------------------------------------------
+// RF-V9 — anulación
+// ---------------------------------------------------------------------------
+
+/**
+ * DECISIÓN TEMPORAL C1 (pendiente de consulta al profesor).
+ *
+ * Contradicción: RF-V9 pide registrar un crédito por el TOTAL al anular una
+ * factura a cuenta corriente, pero la regla 8 prohíbe los saldos a favor. Si
+ * el cliente ya pagó (total o parcialmente), ese crédito dejaría el saldo
+ * negativo.
+ *
+ * Solución conservadora adoptada: si el saldo actual es MENOR que el total de
+ * la factura, la anulación se RECHAZA con 422 VALIDACION (sin código nuevo),
+ * con `details: { saldoActual, totalFactura }`, y no se modifica nada. No se
+ * anulan ni devuelven pagos (fuera del alcance actual).
+ *
+ * Para cambiar el criterio cuando el profesor lo aclare (p. ej. permitir el
+ * saldo a favor o acreditar solo hasta el saldo), basta modificar ESTA
+ * función (y, si se permitiera el saldo a favor, la regla 8 de
+ * registrarMovimientoCuenta()).
+ */
+export function exigirAnulacionSinSaldoAFavor(saldoActual: number, totalFactura: number): void {
+  if (saldoActual < totalFactura) {
+    throw ApiError.desdeCodigo(
+      "VALIDACION",
+      "La factura no puede anularse porque el cliente tiene pagos aplicados en su cuenta corriente: " +
+        "el crédito por el total dejaría un saldo a favor. Gestione primero esos pagos.",
+      { saldoActual, totalFactura },
+    );
+  }
+}
+
+/** Factura que se va a anular, con lo necesario para revertirla. */
+type FacturaAnulable = {
+  id: number;
+  puntoVenta: number;
+  numero: number;
+  total: number;
+  formaPago: FormaPago;
+  clienteId: number | null;
+};
+
+/**
+ * Reglas previas a la anulación (RF-V9, regla 5), sin escribir nada:
+ * - inexistente → 404 NO_ENCONTRADO;
+ * - ya anulada → 409 FACTURA_ANULADA;
+ * - a cuenta corriente: decisión C1 (exigirAnulacionSinSaldoAFavor).
+ */
+async function verificarAnulable(conexion: Conexion, id: number): Promise<FacturaAnulable> {
+  const [factura] = await conexion
+    .select({
+      id: facturas.id,
+      puntoVenta: facturas.puntoVenta,
+      numero: facturas.numero,
+      estado: facturas.estado,
+      total: facturas.total,
+      formaPago: facturas.formaPago,
+      clienteId: facturas.clienteId,
+    })
+    .from(facturas)
+    .where(eq(facturas.id, id))
+    .limit(1);
+  if (!factura) throw ApiError.desdeCodigo("NO_ENCONTRADO", "La factura no existe.");
+  if (factura.estado === "anulada") throw ApiError.desdeCodigo("FACTURA_ANULADA");
+
+  if (factura.formaPago === "cuenta_corriente") {
+    // Regla 7: saldo actual = débitos − créditos (dentro de la transacción
+    // cuando `conexion` es `tx`).
+    const saldoActual = await obtenerSaldo(conexion, requerido(factura.clienteId, "cliente_id"));
+    exigirAnulacionSinSaldoAFavor(saldoActual, factura.total);
+  }
+  return {
+    id: factura.id,
+    puntoVenta: factura.puntoVenta,
+    numero: factura.numero,
+    total: factura.total,
+    formaPago: factura.formaPago,
+    clienteId: factura.clienteId,
+  };
+}
+
+/**
+ * RF-V9: anula una factura. SOLO el administrador (sección 3).
+ *
+ * Recibe el usuario autenticado, los parámetros de la ruta `{ id }` y el
+ * cuerpo SIN validar `{ motivo }`. Regla 5: la factura nunca se edita ni se
+ * borra; solo cambia a «anulada» y queda visible.
+ *
+ * En UNA transacción (todo o nada):
+ *   a. vuelve a leer la factura con el bloqueo de escritura tomado;
+ *   b. verifica que siga emitida (y la decisión C1 si es a cuenta);
+ *   c-d. la marca anulada con motivo, fecha y usuario (regla 11), con un
+ *        UPDATE condicional `WHERE estado = 'emitida'`;
+ *   e-f. reingresa cada renglón con moverStock() (regla 2): un movimiento de
+ *        tipo «anulacion» por renglón, cantidad positiva, existencia
+ *        resultante, usuario, fecha y factura;
+ *   g. si fue a cuenta corriente, un crédito por el total con
+ *      registrarCredito() (regla 7), vinculado con la factura;
+ *   h. devuelve la factura actualizada (misma forma que GET /api/facturas/{id}).
+ *
+ * Contado y tarjeta no crean movimientos de cuenta.
+ * Errores: 422 VALIDACION, 401/403 SIN_PERMISO, 404 NO_ENCONTRADO,
+ * 409 FACTURA_ANULADA y 422 VALIDACION por la decisión C1.
+ */
+export async function anularFactura(
+  usuario: UsuarioAutenticado,
+  parametros: unknown,
+  datos: unknown,
+): Promise<FacturaPublica> {
+  // 1. Validar (solo `motivo`, recortado y con longitud acotada).
+  const { id } = esquemaParametrosFactura.parse(parametros);
+  const { motivo } = esquemaAnulacionFactura.parse(datos);
+  // 2. Permiso: solo el administrador anula (RF-V9).
+  exigirRol(usuario, "admin");
+  // 3. Control previo, sin tomar el bloqueo de escritura (respuesta rápida).
+  await verificarAnulable(db, id);
+
+  // 4. Transacción: todo o nada.
+  return enTransaccion(async (tx) => {
+    // a-b. Otra vez, con el bloqueo tomado: es el control que vale ante dos
+    // anulaciones simultáneas (la segunda ve «anulada» → 409).
+    const factura = await verificarAnulable(tx, id);
+
+    // c-d. Reglas 5 y 11: estado, motivo, fecha y usuario. El WHERE por
+    // estado es una barrera más: nunca se anula dos veces.
+    const fechaAnulacion = new Date();
+    const marcadas = await tx
+      .update(facturas)
+      .set({ estado: "anulada", motivoAnulacion: motivo, fechaAnulacion, anuladaPorId: usuario.id })
+      .where(and(eq(facturas.id, id), eq(facturas.estado, "emitida")))
+      .returning({ id: facturas.id });
+    if (marcadas.length === 0) throw ApiError.desdeCodigo("FACTURA_ANULADA");
+
+    // e-f. Reglas 2 y 11: reingreso SOLO mediante moverStock(), un
+    // movimiento de anulación por renglón, en el orden de la factura.
+    const renglones = await tx
+      .select({ productoId: facturaItems.productoId, cantidad: facturaItems.cantidad })
+      .from(facturaItems)
+      .where(eq(facturaItems.facturaId, id))
+      .orderBy(asc(facturaItems.id));
+    for (const r of renglones) {
+      await moverStock(
+        usuario,
+        { productoId: r.productoId, tipo: "anulacion", cantidad: r.cantidad, motivo: MOTIVO_ANULACION, facturaId: id },
+        tx,
+      );
+    }
+
+    // g. Regla 7: crédito por el total, vinculado con la factura.
+    if (factura.formaPago === "cuenta_corriente") {
+      await registrarCredito(tx, {
+        clienteId: requerido(factura.clienteId, "cliente_id"),
+        importe: factura.total,
+        descripcion: `Anulación factura ${formatearNumeroFactura(factura.puntoVenta, factura.numero)}`,
+        origen: { facturaId: id },
+        fecha: fechaAnulacion,
+      });
+    }
+
+    // h. Forma pública, leída de lo que quedó grabado.
+    return (await buscarFacturaPublica(tx, id))!;
+  });
 }

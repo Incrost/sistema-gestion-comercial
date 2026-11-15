@@ -24,6 +24,13 @@ export const MOTIVO_STOCK_INICIAL = "Stock inicial" satisfies (typeof MOTIVOS_IN
  */
 export const MOTIVO_VENTA = "Venta";
 
+/**
+ * Motivo con el que se registra el reingreso de cada renglón de una factura
+ * anulada (RF-V9, regla 2). La factura queda referenciada en el movimiento;
+ * el motivo escrito por el administrador se guarda en la factura.
+ */
+export const MOTIVO_ANULACION = "Anulación";
+
 /** Tipos de movimiento que se cargan a mano. Venta y anulación salen de las facturas. */
 export const TIPOS_MOVIMIENTO_MANUAL = ["ingreso", "egreso"] as const;
 export type TipoMovimientoManual = (typeof TIPOS_MOVIMIENTO_MANUAL)[number];
