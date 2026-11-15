@@ -18,6 +18,12 @@ export const MOTIVOS_EGRESO = ["Rotura", "Vencimiento", "Ajuste de inventario", 
 /** Motivo con el que se registra el stock inicial de un producto nuevo (RF-P2). */
 export const MOTIVO_STOCK_INICIAL = "Stock inicial" satisfies (typeof MOTIVOS_INGRESO)[number];
 
+/**
+ * Motivo con el que se registra el movimiento de cada renglón de una factura
+ * emitida (RF-V6, regla 2). La factura queda referenciada en el movimiento.
+ */
+export const MOTIVO_VENTA = "Venta";
+
 /** Tipos de movimiento que se cargan a mano. Venta y anulación salen de las facturas. */
 export const TIPOS_MOVIMIENTO_MANUAL = ["ingreso", "egreso"] as const;
 export type TipoMovimientoManual = (typeof TIPOS_MOVIMIENTO_MANUAL)[number];
