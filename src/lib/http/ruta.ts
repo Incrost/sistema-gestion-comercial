@@ -10,6 +10,9 @@
  * - lee el JSON de forma segura (`leerJson`): un cuerpo inválido → 400 JSON_INVALIDO;
  * - convierte cualquier error con `normalizarError()`: ApiError tal cual,
  *   ZodError → 422 VALIDACION, otro → 500 ERROR_INTERNO (el detalle solo va al log);
+ *   las señales internas de Next.js (p. ej. la interrupción del prerenderizado
+ *   al leer cookies durante `next build`) se relanzan con `unstable_rethrow`
+ *   para que no se registren ni respondan como ERROR_INTERNO;
  * - responde siempre con el formato de la sección 11.1.
  *
  * NO contiene reglas de negocio: esas viven en src/servicios.
@@ -18,6 +21,7 @@
  */
 import "server-only";
 
+import { unstable_rethrow } from "next/navigation";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { ApiError, normalizarError } from "@/lib/api-error";
@@ -87,6 +91,7 @@ export function rutaPublica<P = Record<string, string | string[]>>(manejador: Ma
     try {
       return await manejador(req, ctx);
     } catch (error) {
+      unstable_rethrow(error);
       return responderError(error);
     }
   };
@@ -110,6 +115,7 @@ export function rutaProtegida<P = Record<string, string | string[]>>(
       }
       return await manejador(req, { ...ctx, usuario: sesion.usuario });
     } catch (error) {
+      unstable_rethrow(error);
       return responderError(error);
     }
   };

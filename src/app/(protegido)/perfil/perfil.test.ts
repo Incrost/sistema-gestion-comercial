@@ -31,6 +31,8 @@ vi.mock("next/navigation", () => ({
   },
   usePathname: () => entorno.ruta,
   useRouter: () => entorno.router,
+  // El envoltorio de las rutas relanza las señales internas de Next.js; aquí no hay ninguna.
+  unstable_rethrow: () => {},
 }));
 
 import * as moduloDb from "@/db";

@@ -72,3 +72,15 @@ describe("rutaPublica / responderError", () => {
     expect(log).toHaveBeenCalled();
   });
 });
+
+describe("señales internas de Next.js", () => {
+  it("no se convierten en ERROR_INTERNO: el envoltorio las relanza (unstable_rethrow)", async () => {
+    const { redirect } = await import("next/navigation");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const manejador = rutaPublica(async () => redirect("/login"));
+    const error = await manejador(pedido("{}"), contexto).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as { digest?: string }).digest).toMatch(/^NEXT_REDIRECT/);
+    expect(log).not.toHaveBeenCalled();
+  });
+});
