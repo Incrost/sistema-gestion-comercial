@@ -8,7 +8,16 @@
  *   mediante los servicios y moverStock() (ver src/db/semillas/catalogo.ts);
  * - 12 clientes académicos ficticios, uno dado de baja, todos con saldo 0
  *   (ver src/db/semillas/clientes.ts).
- * Facturas, pagos y movimientos de cuenta se agregarán en etapas posteriores.
+ * Facturas, pagos y movimientos de cuenta se agregarán con el módulo de ventas.
+ *
+ * Por qué todavía NO hay deudas ni pagos (etapa RF-C4/RF-C5): el esquema
+ * exige que todo débito de cuenta corriente tenga una factura de origen
+ * (movimientos_cuenta.factura_id con clave foránea real y CHECK de origen).
+ * Crear facturas sin renglones ni movimientos de stock sería un dato
+ * incoherente, y la consigna pide que el seed cree facturas y pagos con los
+ * MISMOS servicios de la aplicación (sección 8). Por eso las deudas y los
+ * pagos de ejemplo se cargarán cuando exista Nueva venta; mientras tanto la
+ * cuenta corriente y los pagos se prueban en bases temporales (pnpm run test:run).
  *
  * - Idempotente: se puede ejecutar varias veces sin duplicar datos.
  * - Usa la base configurada en .env (src/db/config.ts): por defecto, local.db.

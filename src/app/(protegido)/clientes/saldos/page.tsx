@@ -3,7 +3,9 @@
  *
  * Clientes con deuda (saldo > 0), de mayor a menor, con el total adeudado.
  * Usa la misma consulta que GET /api/clientes?conDeuda=true&orden=saldo.
- * Hasta que existan ventas a cuenta corriente y pagos, la lista está vacía.
+ * El saldo sale de movimientos_cuenta (regla 7): refleja los débitos y los
+ * pagos registrados. En local.db la lista está vacía hasta que el seed de
+ * ventas a cuenta corriente (próximo hito) genere deudas.
  *
  * PROVISORIO: interfaz mínima para verificar el módulo.
  */

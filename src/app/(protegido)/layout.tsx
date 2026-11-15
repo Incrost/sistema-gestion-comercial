@@ -28,7 +28,7 @@ async function ConSesion({ children }: { children: ReactNode }) {
   const usuario = await exigirUsuarioDePagina();
   return (
     <>
-      <header className="flex items-center justify-end gap-4 border-b px-6 py-3 text-sm">
+      <header className="flex items-center justify-end gap-4 border-b px-6 py-3 text-sm print:hidden">
         {/* Navegación mínima provisoria (el panel lateral llega más adelante). */}
         <nav className="mr-auto flex gap-4">
           <Link href="/">Inicio</Link>

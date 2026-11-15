@@ -6,8 +6,10 @@
  * Server Component: llama al servicio, que verifica el rol. Al vendedor un
  * cliente inactivo le responde «no encontrado».
  *
- * La pestaña «Cuenta corriente» (RF-C4) y el registro de pagos (RF-C5) se
- * agregan en el próximo bloque.
+ * Cuenta corriente (RF-C4): saldo y últimos movimientos con saldo acumulado;
+ * el historial completo con filtros está en /clientes/[id]/cuenta.
+ * Registro de pagos (RF-C5): el formulario aparece solo si el cliente está
+ * activo, tiene cuenta corriente y debe dinero (el servidor lo vuelve a verificar).
  *
  * PROVISORIO: interfaz mínima para verificar el módulo.
  */
@@ -19,11 +21,18 @@ import { normalizarError } from "@/lib/api-error";
 import { formatearFechaHora, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
 import { obtenerCliente } from "@/servicios/clientes";
+import { obtenerCuentaCorriente } from "@/servicios/cuenta-corriente";
 import { tieneRol } from "@/servicios/permisos";
 
 import { BotonEstadoCliente, FormularioCliente } from "../formulario-cliente";
 
+import { FormularioPago } from "./formulario-pago";
+import { TablaMovimientos } from "./tabla-movimientos";
+
 type Props = { params: Promise<{ id: string }> };
+
+/** Movimientos que muestra la ficha (los más recientes, con su saldo acumulado). */
+const MOVIMIENTOS_EN_FICHA = 10;
 
 const NOMBRES_FORMA = { contado: "Contado", tarjeta: "Tarjeta", cuenta_corriente: "Cuenta corriente" };
 
@@ -53,6 +62,11 @@ async function Ficha({ params }: Props) {
     );
   }
   const { ultimasFacturas, ...cliente } = ficha;
+
+  // RF-C4: la cuenta solo se consulta para clientes activos (el servicio lo exige).
+  const cuenta = cliente.activo ? await obtenerCuentaCorriente(usuario, { id }, {}) : null;
+  const recientes = cuenta ? cuenta.movimientos.slice(-MOVIMIENTOS_EN_FICHA) : [];
+  const puedePagar = cliente.activo && cliente.cuentaCorriente && cliente.saldo > 0;
 
   return (
     <section className="flex flex-col gap-6">
@@ -112,6 +126,41 @@ async function Ficha({ params }: Props) {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h2 className="text-lg font-semibold">Cuenta corriente</h2>
+        {cuenta === null ? (
+          <p className="text-sm">El cliente está dado de baja: su cuenta corriente no se consulta.</p>
+        ) : (
+          <>
+            <p className="text-sm">
+              Saldo actual: <strong>{formatearMoneda(cuenta.saldo)}</strong>
+              {cuenta.movimientos.length > recientes.length &&
+                ` · se muestran los últimos ${recientes.length} de ${cuenta.movimientos.length} movimientos`}
+              {" · "}
+              <Link href={`/clientes/${cliente.id}/cuenta`} className="underline">
+                Ver cuenta completa y filtrar por fechas
+              </Link>
+            </p>
+            {recientes.length === 0 ? (
+              <p className="text-sm">La cuenta corriente no tiene movimientos.</p>
+            ) : (
+              <TablaMovimientos movimientos={recientes} />
+            )}
+          </>
+        )}
+        {puedePagar ? (
+          <FormularioPago clienteId={cliente.id} saldo={cliente.saldo} />
+        ) : (
+          cliente.activo && (
+            <p className="text-sm opacity-75">
+              {cliente.cuentaCorriente
+                ? "Sin deuda pendiente: no hay pagos para registrar."
+                : "El cliente no tiene la cuenta corriente habilitada."}
+            </p>
+          )
         )}
       </div>
 
