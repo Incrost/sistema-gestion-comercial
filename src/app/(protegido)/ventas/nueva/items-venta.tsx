@@ -5,9 +5,19 @@
  * editable, precio unitario y subtotal INFORMATIVOS, existencia y quitar.
  * Los importes y la validez de cada cantidad llegan ya calculados por
  * calcularRenglones() (src/lib/borrador-venta.ts).
+ *
+ * Una sola lista que se adapta: desde 768 px se ve como tabla (con fila de
+ * encabezados); en pantallas chicas, cada ítem es una tarjeta. No hay
+ * controles duplicados ni desplazamiento horizontal.
  */
+import { PackageOpenIcon, Trash2Icon } from "lucide-react";
+
+import { ErrorCampo } from "@/components/formularios/form-field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cantidadMaxima, type RenglonCalculado } from "@/lib/borrador-venta";
 import { formatearMoneda } from "@/lib/formatos";
+import { cn } from "@/lib/utils";
 
 type Props = {
   renglones: RenglonCalculado[];
@@ -19,91 +29,109 @@ type Props = {
   onQuitar: (productoId: number) => void;
 };
 
+/** Columnas compartidas por el encabezado y los renglones (desde 768 px). */
+const COLUMNAS = "md:grid md:grid-cols-[6.5rem_minmax(0,1fr)_6rem_7rem_7.5rem_5rem_2.5rem] md:items-center md:gap-3";
+
 export function ItemsVenta({ renglones, erroresServidor, total, errorGeneral, onCambiarCantidad, onQuitar }: Props) {
   return (
-    <div className="flex flex-col gap-2 text-sm">
+    <div className="flex flex-col gap-3 text-sm">
       {renglones.length === 0 ? (
-        <p className="rounded border border-dashed p-3 text-gray-600">
-          Todavía no hay productos en la venta. Use la búsqueda (F2) para agregarlos.
-        </p>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center text-muted-foreground">
+          <PackageOpenIcon aria-hidden className="size-6" />
+          <p>Todavía no hay productos en la venta. Use la búsqueda (F2) para agregarlos.</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[34rem] text-left">
-            <thead>
-              <tr className="border-b">
-                <th className="py-1 pr-2">Código</th>
-                <th className="py-1 pr-2">Descripción</th>
-                <th className="py-1 pr-2">Cantidad</th>
-                <th className="py-1 pr-2 text-right">Precio unit.</th>
-                <th className="py-1 pr-2 text-right">Subtotal</th>
-                <th className="py-1 pr-2 text-right">Existencia</th>
-                <th className="py-1">
-                  <span className="sr-only">Acciones</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {renglones.map(({ renglon, error, subtotal }) => {
-                const { producto } = renglon;
-                const mensaje = error ?? erroresServidor[producto.id];
-                const idError = `error-renglon-${producto.id}`;
-                return (
-                  <tr key={producto.id} className="border-b align-top">
-                    <td className="py-1 pr-2 font-mono">{producto.codigo}</td>
-                    <td className="py-1 pr-2">
-                      {producto.descripcion}
-                      {mensaje && (
-                        <span id={idError} role="alert" className="block text-red-700">
-                          {mensaje}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-1 pr-2">
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        max={cantidadMaxima(producto)}
-                        inputMode="numeric"
-                        value={renglon.cantidad}
-                        onChange={(e) => onCambiarCantidad(producto.id, e.target.value)}
-                        aria-label={`Cantidad de ${producto.descripcion}`}
-                        aria-invalid={mensaje ? true : undefined}
-                        aria-describedby={mensaje ? idError : undefined}
-                        className={`w-20 rounded border px-2 py-0.5 ${mensaje ? "border-red-600" : ""}`}
-                      />
-                    </td>
-                    <td className="py-1 pr-2 text-right">{formatearMoneda(producto.precio)}</td>
-                    <td className="py-1 pr-2 text-right">{subtotal === null ? "—" : formatearMoneda(subtotal)}</td>
-                    <td className="py-1 pr-2 text-right">{producto.existencia}</td>
-                    <td className="py-1 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onQuitar(producto.id)}
-                        aria-label={`Quitar ${producto.descripcion}`}
-                        className="rounded border px-2 py-0.5"
-                      >
-                        Quitar
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div role="table" aria-label="Ítems de la venta" className="flex flex-col rounded-lg border">
+          <div role="rowgroup" className="hidden md:block">
+            <div role="row" className={cn(COLUMNAS, "rounded-t-lg border-b bg-muted/60 px-3 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase")}>
+              <span role="columnheader">Código</span>
+              <span role="columnheader">Descripción</span>
+              <span role="columnheader">Cantidad</span>
+              <span role="columnheader" className="text-right">Precio unit.</span>
+              <span role="columnheader" className="text-right">Subtotal</span>
+              <span role="columnheader" className="text-right">Existencia</span>
+              <span role="columnheader">
+                <span className="sr-only">Acciones</span>
+              </span>
+            </div>
+          </div>
+          <div role="rowgroup">
+            {renglones.map(({ renglon, error, subtotal }) => {
+              const { producto } = renglon;
+              const mensaje = error ?? erroresServidor[producto.id];
+              const idError = `error-renglon-${producto.id}`;
+              return (
+                <div
+                  key={producto.id}
+                  role="row"
+                  className={cn(
+                    COLUMNAS,
+                    "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 border-b px-3 py-3 last:border-b-0",
+                    mensaje && "bg-destructive/5",
+                  )}
+                >
+                  <span role="cell" className="order-1 font-mono text-xs text-muted-foreground md:order-none">
+                    {producto.codigo}
+                  </span>
+                  <span role="cell" className="order-3 col-span-2 min-w-0 font-medium break-words md:order-none md:col-span-1">
+                    {producto.descripcion}
+                    {mensaje && (
+                      <ErrorCampo id={idError} className="mt-1">
+                        {mensaje}
+                      </ErrorCampo>
+                    )}
+                  </span>
+                  <span role="cell" className="order-4 md:order-none">
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      max={cantidadMaxima(producto)}
+                      inputMode="numeric"
+                      value={renglon.cantidad}
+                      onChange={(e) => onCambiarCantidad(producto.id, e.target.value)}
+                      aria-label={`Cantidad de ${producto.descripcion}`}
+                      aria-invalid={mensaje ? true : undefined}
+                      aria-describedby={mensaje ? idError : undefined}
+                      className="h-8 w-24 tabular-nums md:w-full"
+                    />
+                  </span>
+                  <span role="cell" className="order-6 col-span-2 text-xs text-muted-foreground tabular-nums md:order-none md:col-span-1 md:text-right md:text-sm md:text-foreground">
+                    <span className="md:hidden">Precio unit.: </span>
+                    {formatearMoneda(producto.precio)}
+                  </span>
+                  <span role="cell" className="order-5 self-center text-right font-semibold tabular-nums md:order-none">
+                    {subtotal === null ? "—" : formatearMoneda(subtotal)}
+                  </span>
+                  <span role="cell" className="order-7 col-span-2 text-xs text-muted-foreground tabular-nums md:order-none md:col-span-1 md:text-right md:text-sm md:text-foreground">
+                    <span className="md:hidden">Existencia: </span>
+                    {producto.existencia}
+                  </span>
+                  <span role="cell" className="order-2 justify-self-end md:order-none">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onQuitar(producto.id)}
+                      aria-label={`Quitar ${producto.descripcion}`}
+                      className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2Icon aria-hidden />
+                    </Button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
-      {errorGeneral && (
-        <p role="alert" className="text-red-700">
-          {errorGeneral}
+      {errorGeneral && <ErrorCampo>{errorGeneral}</ErrorCampo>}
+      <div className="flex flex-col items-end gap-0.5 text-right">
+        <p className="text-base">
+          Total estimado: <strong>{formatearMoneda(total)}</strong>
         </p>
-      )}
-      <p className="text-right text-base">
-        Total estimado: <strong>{formatearMoneda(total)}</strong>
-        <span className="block text-xs text-gray-600">
-          Precios e importes informativos: el servidor los recalcula con el catálogo al confirmar.
-        </span>
-      </p>
+        <p className="text-xs text-muted-foreground">Precios e importes informativos: el servidor los recalcula con el catálogo al confirmar.</p>
+      </div>
     </div>
   );
 }

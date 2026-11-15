@@ -1,100 +1,94 @@
 "use client";
 
 /**
- * Acción provisional de anulación de una factura (RF-V9). Solo se muestra al
- * administrador y con la factura emitida; aun así, quien decide el permiso es
- * el servidor (POST /api/facturas/{id}/anulacion responde 403 al vendedor).
+ * Anulación de una factura (RF-V9). Solo se muestra al administrador y con la
+ * factura emitida; aun así, quien decide el permiso es el servidor
+ * (POST /api/facturas/{id}/anulacion responde 403 al vendedor).
  *
- * Pide el motivo y una confirmación explícita antes de enviar (sección 8:
- * confirmación de acciones irreversibles). Valida con el mismo esquema que
- * el servidor y muestra el mensaje de la API si se rechaza (p. ej. 409
- * FACTURA_ANULADA o la decisión temporal C1).
+ * Se confirma en un AlertDialog que explica las consecuencias y pide el
+ * motivo (sección 8: confirmación de acciones irreversibles). El motivo se
+ * valida con el mismo esquema que el servidor y su error queda junto al
+ * campo; el resultado se informa con un aviso temporal.
  */
+import { BanIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormField, propsCampo } from "@/components/formularios/form-field";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { avisos } from "@/lib/avisos";
 import { ErrorDeApi, erroresDeZod, llamarApi } from "@/lib/cliente-api";
 import { esquemaAnulacionFactura, MOTIVO_ANULACION_MAXIMO } from "@/lib/validacion-facturas";
 import type { FacturaPublica } from "@/servicios/facturas";
 
-type Props = { facturaId: number; numeroFormateado: string };
+type Props = { facturaId: number; numeroFormateado: string; compacto?: boolean };
 
-export function AccionAnular({ facturaId, numeroFormateado }: Props) {
+export function AccionAnular({ facturaId, numeroFormateado, compacto = false }: Props) {
   const router = useRouter();
-  const [abierto, setAbierto] = useState(false);
   const [motivo, setMotivo] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const idCampo = `motivo-anulacion-${facturaId}`;
 
-  async function enviar(evento: FormEvent) {
-    evento.preventDefault();
-    setError(null);
+  async function anular(): Promise<boolean> {
+    setError(undefined);
     const validacion = esquemaAnulacionFactura.safeParse({ motivo });
     if (!validacion.success) {
       setError(erroresDeZod(validacion.error).motivo ?? "El motivo es inválido.");
-      return;
+      return false;
     }
-    if (!window.confirm(`¿Confirma la anulación de la factura ${numeroFormateado}? Esta acción no se puede deshacer.`)) {
-      return;
-    }
-    setEnviando(true);
     try {
       await llamarApi<FacturaPublica>(`/api/facturas/${facturaId}/anulacion`, {
         method: "POST",
         body: JSON.stringify(validacion.data),
       });
-      setAbierto(false);
-      setMotivo("");
-      router.refresh();
     } catch (e) {
-      setError(e instanceof ErrorDeApi ? (e.campos.motivo ?? e.message) : (e as Error).message);
-    } finally {
-      setEnviando(false);
+      if (e instanceof ErrorDeApi && e.campos.motivo) {
+        setError(e.campos.motivo);
+      } else {
+        avisos.error((e as Error).message, { id: `anulacion-${facturaId}` });
+      }
+      return false;
     }
-  }
-
-  if (!abierto) {
-    return (
-      <button type="button" onClick={() => setAbierto(true)} className="rounded border border-red-700 px-2 py-0.5 text-red-700 print:hidden">
-        Anular
-      </button>
-    );
+    setMotivo("");
+    avisos.exito(`Factura ${numeroFormateado} anulada.`, { id: `anulacion-${facturaId}` });
+    router.refresh();
+    return true;
   }
 
   return (
-    <form onSubmit={enviar} noValidate className="flex flex-col gap-2 rounded border p-2 text-sm print:hidden">
-      <label className="flex flex-col gap-1">
-        Motivo de la anulación de {numeroFormateado}
-        <textarea
+    <ConfirmDialog
+      titulo={`¿Anular la factura ${numeroFormateado}?`}
+      descripcion={
+        <ul className="list-disc space-y-1 pl-5">
+          <li>La factura quedará marcada como ANULADA y no podrá volver a emitirse.</li>
+          <li>Las existencias de sus productos se reponen.</li>
+          <li>Si se vendió a cuenta corriente, se registra un crédito por el total en la cuenta del cliente.</li>
+        </ul>
+      }
+      textoConfirmar="Anular factura"
+      textoEnviando="Anulando…"
+      alConfirmar={anular}
+      onAbiertoCambia={(abierto) => {
+        if (!abierto) setError(undefined);
+      }}
+      disparador={
+        <Button type="button" variant="destructive-soft" size={compacto ? "sm" : "default"} className="print:hidden">
+          <BanIcon aria-hidden />
+          Anular
+        </Button>
+      }
+    >
+      <FormField id={idCampo} etiqueta="Motivo de la anulación" error={error} ayuda={`Obligatorio. Hasta ${MOTIVO_ANULACION_MAXIMO} caracteres.`}>
+        <Textarea
+          {...propsCampo(idCampo, error, true)}
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
           maxLength={MOTIVO_ANULACION_MAXIMO}
-          rows={2}
-          className="rounded border px-2 py-1"
-          aria-invalid={error !== null}
+          rows={3}
         />
-      </label>
-      {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
-      )}
-      <div className="flex gap-2">
-        <button type="submit" disabled={enviando} className="rounded border border-red-700 px-2 py-0.5 text-red-700">
-          {enviando ? "Anulando…" : "Confirmar anulación"}
-        </button>
-        <button
-          type="button"
-          disabled={enviando}
-          onClick={() => {
-            setAbierto(false);
-            setError(null);
-          }}
-          className="rounded border px-2 py-0.5"
-        >
-          Cancelar
-        </button>
-      </div>
-    </form>
+      </FormField>
+    </ConfirmDialog>
   );
 }

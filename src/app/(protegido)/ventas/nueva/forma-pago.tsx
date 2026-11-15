@@ -9,11 +9,17 @@
  * - Cuenta corriente: solo con cliente registrado y habilitado; se advierte
  *   si el total estimado supera el crédito disponible.
  *
- * Los cálculos salen de evaluarContado() y evaluarCuentaCorriente()
- * (src/lib/borrador-venta.ts). El servidor vuelve a verificar todo.
+ * Las opciones son botones de radio nativos (F8 enfoca la elegida y las
+ * flechas cambian de opción). Los cálculos salen de evaluarContado() y
+ * evaluarCuentaCorriente() (src/lib/borrador-venta.ts). El servidor vuelve a
+ * verificar todo.
  */
-import type { ReactNode, Ref } from "react";
+import { CreditCardIcon, BanknoteIcon, TriangleAlertIcon, WalletIcon } from "lucide-react";
+import type { Ref } from "react";
 
+import { ErrorCampo, FormField, propsCampo } from "@/components/formularios/form-field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   evaluarContado,
   evaluarCuentaCorriente,
@@ -22,6 +28,7 @@ import {
 } from "@/lib/borrador-venta";
 import type { ErroresCampo } from "@/lib/cliente-api";
 import { formatearMoneda } from "@/lib/formatos";
+import { cn } from "@/lib/utils";
 import {
   ETIQUETAS_FORMA_PAGO,
   ETIQUETAS_TIPO_TARJETA,
@@ -44,60 +51,76 @@ type Props = {
   opcionesRef?: Ref<HTMLFieldSetElement>;
 };
 
+const ICONOS: Record<FormaPago, typeof WalletIcon> = {
+  contado: BanknoteIcon,
+  tarjeta: CreditCardIcon,
+  cuenta_corriente: WalletIcon,
+};
+
 export function FormaPago({ pago, cliente, total, errores, onCambiarForma, onActualizar, opcionesRef }: Props) {
   const cuenta = evaluarCuentaCorriente(cliente, total);
   const contado = evaluarContado(pago.montoRecibido, total);
+  const errorMonto = errores["pago.montoRecibido"] ?? (contado.ok ? undefined : contado.mensaje);
 
   return (
-    <div className="flex flex-col gap-3 text-sm">
-      <fieldset ref={opcionesRef} className="flex flex-wrap gap-x-4 gap-y-2">
-        <legend className="mb-1">
-          Forma de pago <kbd className="text-xs">(F8)</kbd>
+    <div className="@container flex flex-col gap-4 text-sm">
+      <fieldset ref={opcionesRef} className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">
+          Forma de pago <kbd className="text-xs font-normal text-muted-foreground">(F8)</kbd>
         </legend>
-        {FORMAS_PAGO.map((forma) => {
-          const deshabilitada = forma === "cuenta_corriente" && !cuenta.habilitada;
-          return (
-            <label key={forma} className={`flex items-center gap-1 ${deshabilitada ? "text-gray-500" : ""}`}>
-              <input
-                type="radio"
-                name="forma-pago"
-                value={forma}
-                checked={pago.forma === forma}
-                disabled={deshabilitada}
-                aria-describedby={deshabilitada ? "motivo-cuenta-corriente" : undefined}
-                onChange={() => onCambiarForma(forma)}
-              />
-              {ETIQUETAS_FORMA_PAGO[forma]}
-            </label>
-          );
-        })}
+        <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
+          {FORMAS_PAGO.map((forma) => {
+            const deshabilitada = forma === "cuenta_corriente" && !cuenta.habilitada;
+            const Icono = ICONOS[forma];
+            return (
+              <label
+                key={forma}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-2 transition-colors hover:bg-muted",
+                  "has-[:checked]:border-primary has-[:checked]:bg-accent has-[:checked]:font-medium has-[:checked]:text-accent-foreground",
+                  "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
+                  deshabilitada && "cursor-not-allowed text-muted-foreground opacity-70 hover:bg-card",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="forma-pago"
+                  value={forma}
+                  checked={pago.forma === forma}
+                  disabled={deshabilitada}
+                  aria-describedby={deshabilitada ? "motivo-cuenta-corriente" : undefined}
+                  onChange={() => onCambiarForma(forma)}
+                  className="size-4 accent-primary outline-none"
+                />
+                <Icono aria-hidden className="size-4 shrink-0" />
+                <span className="leading-tight">{ETIQUETAS_FORMA_PAGO[forma]}</span>
+              </label>
+            );
+          })}
+        </div>
       </fieldset>
       {!cuenta.habilitada && (
-        <p id="motivo-cuenta-corriente" className="text-xs text-gray-600">
+        <p id="motivo-cuenta-corriente" className="text-xs text-muted-foreground">
           Cuenta corriente no disponible: {cuenta.motivo}
         </p>
       )}
-      {errores["pago.forma"] && (
-        <p role="alert" className="text-red-700">
-          {errores["pago.forma"]}
-        </p>
-      )}
+      {errores["pago.forma"] && <ErrorCampo>{errores["pago.forma"]}</ErrorCampo>}
 
       {pago.forma === "contado" && (
         <div className="flex flex-col gap-2">
-          <Campo id="monto-recibido" etiqueta="Monto recibido en pesos (opcional; vacío = el total)" error={errores["pago.montoRecibido"] ?? (contado.ok ? undefined : contado.mensaje)}>
-            <input
-              id="monto-recibido"
+          <FormField id="monto-recibido" etiqueta="Monto recibido en pesos (opcional; vacío = el total)" error={errorMonto}>
+            <Input
+              {...propsCampo("monto-recibido", errorMonto)}
               value={pago.montoRecibido}
               onChange={(e) => onActualizar({ montoRecibido: e.target.value })}
               inputMode="decimal"
               autoComplete="off"
               placeholder={total > 0 ? formatearMoneda(total) : "Ej.: 15000,50"}
-              className="w-48 rounded border px-2 py-1"
+              className="tabular-nums sm:max-w-56 lg:max-w-none"
             />
-          </Campo>
+          </FormField>
           {contado.ok && (
-            <p>
+            <p className="rounded-lg bg-success-soft px-3 py-2 text-success-strong">
               Vuelto estimado: <strong>{formatearMoneda(contado.vuelto)}</strong>
             </p>
           )}
@@ -105,53 +128,52 @@ export function FormaPago({ pago, cliente, total, errores, onCambiarForma, onAct
       )}
 
       {pago.forma === "tarjeta" && (
-        <div className="flex flex-col gap-2">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Campo id="tarjeta-tipo" etiqueta="Tipo" error={errores["pago.tarjeta.tipo"]}>
-              <select
-                id="tarjeta-tipo"
+        <div className="flex flex-col gap-3">
+          <div className="grid gap-3 @lg:grid-cols-3">
+            <FormField id="tarjeta-tipo" etiqueta="Tipo" error={errores["pago.tarjeta.tipo"]}>
+              <NativeSelect
+                {...propsCampo("tarjeta-tipo", errores["pago.tarjeta.tipo"])}
                 value={pago.tarjetaTipo}
                 onChange={(e) => onActualizar({ tarjetaTipo: e.target.value as TipoTarjeta | "" })}
-                className="rounded border px-2 py-1"
+                className="w-full"
               >
-                <option value="">Seleccione…</option>
+                <NativeSelectOption value="">Seleccione…</NativeSelectOption>
                 {TIPOS_TARJETA.map((t) => (
-                  <option key={t} value={t}>
+                  <NativeSelectOption key={t} value={t}>
                     {ETIQUETAS_TIPO_TARJETA[t]}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </select>
-            </Campo>
-            <Campo id="tarjeta-marca" etiqueta="Marca" error={errores["pago.tarjeta.marca"]}>
-              <input
-                id="tarjeta-marca"
+              </NativeSelect>
+            </FormField>
+            <FormField id="tarjeta-marca" etiqueta="Marca" error={errores["pago.tarjeta.marca"]}>
+              <Input
+                {...propsCampo("tarjeta-marca", errores["pago.tarjeta.marca"])}
                 value={pago.tarjetaMarca}
                 onChange={(e) => onActualizar({ tarjetaMarca: e.target.value })}
                 list="marcas-tarjeta"
                 maxLength={MARCA_TARJETA_MAXIMA}
                 autoComplete="off"
-                className="rounded border px-2 py-1"
               />
               <datalist id="marcas-tarjeta">
                 {MARCAS_TARJETA_SUGERIDAS.map((m) => (
                   <option key={m} value={m} />
                 ))}
               </datalist>
-            </Campo>
-            <Campo id="tarjeta-ultimos4" etiqueta="Últimos 4 dígitos" error={errores["pago.tarjeta.ultimos4"]}>
-              <input
-                id="tarjeta-ultimos4"
+            </FormField>
+            <FormField id="tarjeta-ultimos4" etiqueta="Últimos 4 dígitos" error={errores["pago.tarjeta.ultimos4"]}>
+              <Input
+                {...propsCampo("tarjeta-ultimos4", errores["pago.tarjeta.ultimos4"])}
                 value={pago.tarjetaUltimos4}
                 onChange={(e) => onActualizar({ tarjetaUltimos4: e.target.value.replace(/\D/g, "").slice(0, 4) })}
                 inputMode="numeric"
                 maxLength={4}
                 pattern="\d{4}"
                 autoComplete="off"
-                className="w-24 rounded border px-2 py-1"
+                className="tabular-nums"
               />
-            </Campo>
+            </FormField>
           </div>
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-muted-foreground">
             Solo se registran el tipo, la marca y los últimos 4 dígitos. Nunca se solicitan el número completo, el código de
             seguridad ni el vencimiento.
           </p>
@@ -159,36 +181,23 @@ export function FormaPago({ pago, cliente, total, errores, onCambiarForma, onAct
       )}
 
       {pago.forma === "cuenta_corriente" && cliente && (
-        <div className="flex flex-col gap-1">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-            <dt>Saldo actual</dt>
-            <dd>{formatearMoneda(cliente.saldo)}</dd>
-            <dt>Límite</dt>
-            <dd>{cliente.limiteCredito === null ? "Sin límite" : formatearMoneda(cliente.limiteCredito)}</dd>
-            <dt>Crédito disponible</dt>
-            <dd>{cliente.disponible === null ? "Sin límite" : formatearMoneda(cliente.disponible)}</dd>
+        <div className="flex flex-col gap-2">
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-lg bg-muted/60 p-3">
+            <dt className="text-muted-foreground">Saldo actual</dt>
+            <dd className="text-right tabular-nums">{formatearMoneda(cliente.saldo)}</dd>
+            <dt className="text-muted-foreground">Límite</dt>
+            <dd className="text-right tabular-nums">{cliente.limiteCredito === null ? "Sin límite" : formatearMoneda(cliente.limiteCredito)}</dd>
+            <dt className="text-muted-foreground">Crédito disponible</dt>
+            <dd className="text-right font-medium tabular-nums">{cliente.disponible === null ? "Sin límite" : formatearMoneda(cliente.disponible)}</dd>
           </dl>
           {cuenta.advertencia && (
-            <p role="alert" className="text-amber-800">
+            <p role="alert" className="flex items-start gap-2 rounded-lg bg-warning-soft px-3 py-2 text-warning-strong">
+              <TriangleAlertIcon aria-hidden className="mt-0.5 size-4 shrink-0" />
               {cuenta.advertencia}
             </p>
           )}
-          <p className="text-xs text-gray-600">El servidor recalcula el saldo y el límite al confirmar.</p>
+          <p className="text-xs text-muted-foreground">El servidor recalcula el saldo y el límite al confirmar.</p>
         </div>
-      )}
-    </div>
-  );
-}
-
-function Campo({ id, etiqueta, error, children }: { id: string; etiqueta: string; error?: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id}>{etiqueta}</label>
-      {children}
-      {error && (
-        <span role="alert" className="text-red-700">
-          {error}
-        </span>
       )}
     </div>
   );

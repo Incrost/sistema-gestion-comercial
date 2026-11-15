@@ -4,34 +4,75 @@
  * Clientes con deuda (saldo > 0), de mayor a menor, con el total adeudado.
  * Usa la misma consulta que GET /api/clientes?conDeuda=true&orden=saldo.
  * El saldo sale de movimientos_cuenta (regla 7): refleja los débitos y los
- * pagos registrados. En local.db la lista está vacía hasta que el seed de
- * ventas a cuenta corriente (próximo hito) genere deudas.
- *
- * PROVISORIO: interfaz mínima para verificar el módulo.
+ * pagos registrados.
  */
+import { CircleCheckBigIcon, UsersIcon, WalletIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { MetricCard } from "@/components/datos/metric-card";
+import { Pagination } from "@/components/datos/pagination";
+import { EmptyState } from "@/components/estados/empty-state";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Grilla, Texto } from "@/components/layout/primitivas";
 import { normalizarError } from "@/lib/api-error";
-import { formatearMoneda } from "@/lib/formatos";
+import { formatearDocumento, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
-import { listarClientes } from "@/servicios/clientes";
+import { listarClientes, type ClientePublico } from "@/servicios/clientes";
+
+export const metadata: Metadata = { title: "Saldos" };
 
 type ParametrosBusqueda = Promise<Record<string, string | string[] | undefined>>;
 
 const TAMANIO_PAGINA = 20;
 
+const COLUMNAS: Columna<ClientePublico>[] = [
+  {
+    id: "cliente",
+    encabezado: "Cliente",
+    principal: true,
+    className: "whitespace-normal min-w-44",
+    celda: (c) => (
+      <Link href={`/clientes/${c.id}`} className="font-medium text-primary hover:underline">
+        {c.nombre}
+      </Link>
+    ),
+  },
+  { id: "documento", encabezado: "Documento", celda: (c) => `${c.tipoDoc} ${formatearDocumento(c.tipoDoc, c.nroDoc)}` },
+  { id: "saldo", encabezado: "Saldo", alinear: "derecha", celda: (c) => (
+      <Texto as="span" numerico tono="advertencia" peso="fuerte">
+        {formatearMoneda(c.saldo)}
+      </Texto>
+    ) },
+  { id: "limite", encabezado: "Límite", alinear: "derecha", celda: (c) => (c.limiteCredito === null ? "Sin límite" : formatearMoneda(c.limiteCredito)) },
+  { id: "disponible", encabezado: "Disponible", alinear: "derecha", celda: (c) => (c.disponible === null ? "—" : formatearMoneda(c.disponible)) },
+];
+
 export default function PaginaSaldos({ searchParams }: { searchParams: ParametrosBusqueda }) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando saldos…</p>}>
-      <Saldos searchParams={searchParams} />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState texto="Cargando saldos…" />}>
+        <Saldos searchParams={searchParams} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
 async function Saldos({ searchParams }: { searchParams: ParametrosBusqueda }) {
   const usuario = await exigirUsuarioDePagina(); // RF-U2
   const pagina = (await searchParams).page;
+  const encabezado = (
+    <PageHeader
+      volver={{ href: "/clientes", texto: "Volver al listado" }}
+      titulo="Saldos de cuenta corriente"
+      descripcion="Clientes con deuda, de mayor a menor saldo."
+    />
+  );
 
   let lista;
   try {
@@ -43,66 +84,33 @@ async function Saldos({ searchParams }: { searchParams: ParametrosBusqueda }) {
     });
   } catch (error) {
     return (
-      <p role="alert" className="text-red-700">
-        {normalizarError(error).message}
-      </p>
+      <>
+        {encabezado}
+        <ErrorState titulo="No se pudieron cargar los saldos" mensaje={normalizarError(error).message} />
+      </>
     );
   }
   const totalPaginas = Math.max(1, Math.ceil(lista.total / lista.pageSize));
   const enlace = (page: number) => (page > 1 ? `/clientes/saldos?page=${page}` : "/clientes/saldos");
+  const totalAdeudado = lista.totalAdeudado ?? 0;
 
   return (
-    <section className="flex flex-col gap-6">
-      <Link href="/clientes" className="text-sm underline">
-        ← Volver al listado
-      </Link>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">Saldos de cuenta corriente</h1>
-        <p className="text-sm">
-          Total adeudado: <strong>{formatearMoneda(lista.totalAdeudado ?? 0)}</strong> · {lista.total} cliente(s) con deuda
-        </p>
-      </div>
+    <>
+      {encabezado}
+      <Grilla columnas="2">
+        <MetricCard titulo="Total adeudado" valor={formatearMoneda(totalAdeudado)} icono={WalletIcon} tono={totalAdeudado > 0 ? "advertencia" : "exito"} />
+        <MetricCard titulo="Clientes con deuda" valor={String(lista.total)} icono={UsersIcon} />
+      </Grilla>
 
-      {lista.data.length === 0 ? (
-        <p className="text-sm">No hay clientes con deuda.</p>
-      ) : (
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="py-2 pr-3">Cliente</th>
-              <th className="py-2 pr-3">Documento</th>
-              <th className="py-2 pr-3 text-right">Saldo</th>
-              <th className="py-2 pr-3 text-right">Límite</th>
-              <th className="py-2 pr-3 text-right">Disponible</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lista.data.map((c) => (
-              <tr key={c.id} className="border-b">
-                <td className="py-2 pr-3">
-                  <Link href={`/clientes/${c.id}`} className="underline">
-                    {c.nombre}
-                  </Link>
-                </td>
-                <td className="py-2 pr-3 font-mono">
-                  {c.tipoDoc} {c.nroDoc}
-                </td>
-                <td className="py-2 pr-3 text-right">{formatearMoneda(c.saldo)}</td>
-                <td className="py-2 pr-3 text-right">{c.limiteCredito === null ? "Sin límite" : formatearMoneda(c.limiteCredito)}</td>
-                <td className="py-2 pr-3 text-right">{c.disponible === null ? "—" : formatearMoneda(c.disponible)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <DataTable
+        etiqueta="Saldos de clientes"
+        columnas={COLUMNAS}
+        filas={lista.data}
+        clave={(c) => c.id}
+        vacio={<EmptyState icono={CircleCheckBigIcon} titulo="No hay clientes con deuda." descripcion="Todas las cuentas corrientes están al día." />}
+      />
 
-      <nav className="flex items-center gap-3 text-sm" aria-label="Paginación">
-        {lista.page > 1 ? <Link href={enlace(lista.page - 1)} className="underline">Anterior</Link> : <span className="opacity-50">Anterior</span>}
-        <span>
-          Página {lista.page} de {totalPaginas}
-        </span>
-        {lista.page < totalPaginas ? <Link href={enlace(lista.page + 1)} className="underline">Siguiente</Link> : <span className="opacity-50">Siguiente</span>}
-      </nav>
-    </section>
+      <Pagination pagina={lista.page} totalPaginas={totalPaginas} total={lista.total} unidad={["cliente con deuda", "clientes con deuda"]} enlace={enlace} />
+    </>
   );
 }

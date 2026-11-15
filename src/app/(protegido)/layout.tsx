@@ -1,51 +1,68 @@
 /**
- * Layout de todas las páginas protegidas (todo salvo /login).
+ * Layout de todas las páginas protegidas (todo salvo /login): estructura
+ * general del sistema (sección 4) con panel lateral fijo en escritorio, menú
+ * lateral en móvil y barra superior con el usuario conectado.
  *
  * Segunda barrera de la sección 10.5: aunque el proxy ya comprobó la firma de
  * la cookie, aquí se vuelve a leer al usuario de la base. Si fue desactivado,
  * se redirige a /login. Cada página llama además a exigirUsuarioDePagina(),
  * porque al navegar entre páginas el layout no siempre se vuelve a ejecutar.
- *
- * PROVISORIO: barra mínima para probar el flujo. El panel lateral y la barra
- * definitivos (sección 4) se construyen en una etapa posterior.
  */
-import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
-import { BotonCerrarSesion } from "@/components/auth/boton-cerrar-sesion";
+import { LoadingState } from "@/components/estados/loading-state";
+import { AppSidebar } from "@/components/navegacion/app-sidebar";
+import { Topbar } from "@/components/navegacion/topbar";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
-import { tieneRol } from "@/servicios/permisos";
 
 export default function LayoutProtegido({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={<p className="p-6 text-sm">Verificando la sesión…</p>}>
+    <Suspense fallback={<EstructuraCargando />}>
       <ConSesion>{children}</ConSesion>
     </Suspense>
+  );
+}
+
+/** Estructura general: el contenido aprovecha todo el ancho que deja el panel. */
+function Estructura({ panel, barra, children }: { panel: ReactNode; barra: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex min-h-svh w-full flex-1">
+      <a
+        href="#contenido"
+        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+      >
+        Saltar al contenido
+      </a>
+      {panel}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {barra}
+        <main id="contenido" tabIndex={-1} className="min-w-0 flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8 print:p-0">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function EstructuraCargando() {
+  return (
+    <Estructura
+      panel={<div aria-hidden className="hidden w-64 shrink-0 bg-sidebar lg:block print:hidden" />}
+      barra={<div aria-hidden className="h-14 border-b bg-card print:hidden" />}
+    >
+      <LoadingState texto="Verificando la sesión…" variante="tarjetas" />
+    </Estructura>
   );
 }
 
 async function ConSesion({ children }: { children: ReactNode }) {
   const usuario = await exigirUsuarioDePagina();
   return (
-    <>
-      <header className="flex items-center justify-end gap-4 border-b px-6 py-3 text-sm print:hidden">
-        {/* Navegación mínima provisoria (el panel lateral llega más adelante). */}
-        <nav className="mr-auto flex gap-4">
-          <Link href="/">Inicio</Link>
-          <Link href="/ventas/nueva">Nueva venta</Link>
-          <Link href="/ventas">Ventas</Link>
-          <Link href="/productos">Productos</Link>
-          <Link href="/productos/categorias">Categorías</Link>
-          <Link href="/clientes">Clientes</Link>
-          <Link href="/clientes/saldos">Saldos</Link>
-          {tieneRol(usuario, "admin") && <Link href="/usuarios">Usuarios</Link>}
-        </nav>
-        <span>
-          {usuario.nombre} ({usuario.rol === "admin" ? "Administrador" : "Vendedor"})
-        </span>
-        <BotonCerrarSesion />
-      </header>
-      <main className="flex-1 p-6">{children}</main>
-    </>
+    <Estructura
+      panel={<AppSidebar rol={usuario.rol} />}
+      barra={<Topbar usuario={{ nombre: usuario.nombre, email: usuario.email, rol: usuario.rol }} />}
+    >
+      {children}
+    </Estructura>
   );
 }

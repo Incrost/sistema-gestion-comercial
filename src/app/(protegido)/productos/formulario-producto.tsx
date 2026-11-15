@@ -1,17 +1,27 @@
 "use client";
 
 /**
- * Formulario provisional de alta y edición de productos (RF-P2). Solo admin.
+ * Alta y edición de productos (RF-P2). Solo admin. Se abre en una ventana
+ * modal desde el catálogo («Nuevo producto») o desde la ficha («Editar»).
  *
  * Valida con los MISMOS esquemas de Zod que el servidor
  * (src/lib/validacion-productos.ts) y luego llama a la API REST. La decisión
  * final (permisos, código único, categoría activa) la toma el servicio.
  * El precio se escribe en pesos y se envía en centavos.
  */
+import { PencilIcon, PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-import { ErrorDeApi, erroresDeZod, llamarApi, type ErroresCampo } from "@/lib/cliente-api";
+import { ErrorCampo, FormField, propsCampo } from "@/components/formularios/form-field";
+import { MoneyField } from "@/components/formularios/money-field";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { useEnvio } from "@/hooks/usar-envio";
+import { avisos } from "@/lib/avisos";
+import { erroresDeZod, llamarApi } from "@/lib/cliente-api";
 import { centavosATextoEditable, pesosACentavos } from "@/lib/importes";
 import { esquemaAltaProducto, esquemaEdicionProducto } from "@/lib/validacion-productos";
 import type { CategoriaPublica } from "@/servicios/categorias";
@@ -23,7 +33,39 @@ type Props = {
   producto?: ProductoPublico;
 };
 
-export function FormularioProducto({ categorias, producto }: Props) {
+/** Botón + ventana modal con el formulario de alta o edición. */
+export function DialogoProducto({ categorias, producto }: Props) {
+  const [abierto, setAbierto] = useState(false);
+  const edicion = producto !== undefined;
+  return (
+    <Dialog open={abierto} onOpenChange={setAbierto}>
+      <DialogTrigger asChild>
+        {edicion ? (
+          <Button variant="outline">
+            <PencilIcon aria-hidden />
+            Editar
+          </Button>
+        ) : (
+          <Button>
+            <PlusIcon aria-hidden />
+            Nuevo producto
+          </Button>
+        )}
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{edicion ? `Editar ${producto.codigo}` : "Nuevo producto"}</DialogTitle>
+          <DialogDescription>
+            {edicion ? "La existencia no se edita aquí: se modifica con ingresos y egresos de stock." : "El stock inicial se registra como un ingreso."}
+          </DialogDescription>
+        </DialogHeader>
+        {abierto && <FormularioProducto categorias={categorias} producto={producto} onListo={() => setAbierto(false)} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FormularioProducto({ categorias, producto, onListo }: Props & { onListo: () => void }) {
   const router = useRouter();
   const edicion = producto !== undefined;
   const [valores, setValores] = useState({
@@ -34,16 +76,12 @@ export function FormularioProducto({ categorias, producto }: Props) {
     stockMinimo: producto ? String(producto.stockMinimo) : "0",
     stockInicial: "0",
   });
-  const [errores, setErrores] = useState<ErroresCampo>({});
-  const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
-  const [enviando, setEnviando] = useState(false);
+  const { enviando, errores, setErrores, ejecutar } = useEnvio();
 
-  const cambiar = (campo: keyof typeof valores) => (valor: string) =>
-    setValores((v) => ({ ...v, [campo]: valor }));
+  const cambiar = (campo: keyof typeof valores) => (valor: string) => setValores((v) => ({ ...v, [campo]: valor }));
 
   async function enviar(evento: FormEvent) {
     evento.preventDefault();
-    setMensaje(null);
 
     const precio = pesosACentavos(valores.precio);
     if (precio === null) {
@@ -75,7 +113,7 @@ export function FormularioProducto({ categorias, producto }: Props) {
         )
       : datos;
     if (edicion && Object.keys(cuerpo).length === 0) {
-      setMensaje({ tipo: "ok", texto: "No hay cambios para guardar." });
+      avisos.info("No hay cambios para guardar.", { id: "producto-sin-cambios" });
       return;
     }
 
@@ -84,80 +122,89 @@ export function FormularioProducto({ categorias, producto }: Props) {
       setErrores(erroresDeZod(validacion.error));
       return;
     }
-    setErrores({});
-    setEnviando(true);
-    try {
-      const guardado = await llamarApi<ProductoPublico>(
-        edicion ? `/api/productos/${producto.id}` : "/api/productos",
-        { method: edicion ? "PATCH" : "POST", body: JSON.stringify(cuerpo) },
-      );
-      if (edicion) {
-        setMensaje({ tipo: "ok", texto: "Producto actualizado." });
-        router.refresh();
-      } else {
-        router.push(`/productos/${guardado.id}`);
-      }
-    } catch (e) {
-      if (e instanceof ErrorDeApi) setErrores(e.campos);
-      setMensaje({ tipo: "error", texto: (e as Error).message });
-    } finally {
-      setEnviando(false);
-    }
+    const guardado = await ejecutar(
+      () =>
+        llamarApi<ProductoPublico>(edicion ? `/api/productos/${producto.id}` : "/api/productos", {
+          method: edicion ? "PATCH" : "POST",
+          body: JSON.stringify(cuerpo),
+        }),
+      { exito: (p) => (edicion ? "Producto actualizado." : `Se creó el producto ${p.codigo}.`), idError: "producto-error" },
+    );
+    if (!guardado) return;
+    onListo();
+    if (edicion) router.refresh();
+    else router.push(`/productos/${guardado.id}`);
   }
 
   return (
-    <form onSubmit={enviar} noValidate className="flex flex-col gap-3 rounded border p-4 text-sm">
-      <h2 className="text-lg font-semibold">{edicion ? "Editar producto" : "Nuevo producto"}</h2>
-      {mensaje && (
-        <p role={mensaje.tipo === "error" ? "alert" : "status"} className={mensaje.tipo === "error" ? "text-red-700" : "text-green-700"}>
-          {mensaje.texto}
-        </p>
-      )}
+    <form onSubmit={enviar} noValidate className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <Campo etiqueta="Código" error={errores.codigo}>
-          <input value={valores.codigo} onChange={(e) => cambiar("codigo")(e.target.value)} className="rounded border px-2 py-1" />
-        </Campo>
-        <Campo etiqueta="Descripción" error={errores.descripcion}>
-          <input value={valores.descripcion} onChange={(e) => cambiar("descripcion")(e.target.value)} className="rounded border px-2 py-1" />
-        </Campo>
-        <Campo etiqueta="Categoría" error={errores.categoriaId}>
-          <select value={valores.categoriaId} onChange={(e) => cambiar("categoriaId")(e.target.value)} className="rounded border px-2 py-1">
-            <option value="">Seleccione…</option>
+        <FormField id="producto-codigo" etiqueta="Código" error={errores.codigo}>
+          <Input {...propsCampo("producto-codigo", errores.codigo)} value={valores.codigo} onChange={(e) => cambiar("codigo")(e.target.value)} autoComplete="off" />
+        </FormField>
+        <FormField id="producto-categoria" etiqueta="Categoría" error={errores.categoriaId}>
+          <NativeSelect
+            {...propsCampo("producto-categoria", errores.categoriaId)}
+            value={valores.categoriaId}
+            onChange={(e) => cambiar("categoriaId")(e.target.value)}
+            className="w-full"
+          >
+            <NativeSelectOption value="">Seleccione…</NativeSelectOption>
             {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
+              <NativeSelectOption key={c.id} value={c.id}>
                 {c.nombre}
-              </option>
+              </NativeSelectOption>
             ))}
             {producto && !categorias.some((c) => c.id === producto.categoria.id) && (
-              <option value={producto.categoria.id}>{producto.categoria.nombre} (inactiva)</option>
+              <NativeSelectOption value={producto.categoria.id}>{producto.categoria.nombre} (inactiva)</NativeSelectOption>
             )}
-          </select>
-        </Campo>
-        <Campo etiqueta="Precio de venta en pesos (ej. 12500,50)" error={errores.precio}>
-          <input value={valores.precio} inputMode="decimal" onChange={(e) => cambiar("precio")(e.target.value)} className="rounded border px-2 py-1" />
-        </Campo>
-        <Campo etiqueta="Stock mínimo" error={errores.stockMinimo}>
-          <input type="number" min={0} step={1} value={valores.stockMinimo} onChange={(e) => cambiar("stockMinimo")(e.target.value)} className="rounded border px-2 py-1" />
-        </Campo>
+          </NativeSelect>
+        </FormField>
+        <FormField id="producto-descripcion" etiqueta="Descripción" error={errores.descripcion} className="sm:col-span-2">
+          <Input {...propsCampo("producto-descripcion", errores.descripcion)} value={valores.descripcion} onChange={(e) => cambiar("descripcion")(e.target.value)} />
+        </FormField>
+        <MoneyField
+          id="producto-precio"
+          etiqueta="Precio de venta"
+          ayuda="En pesos, por ejemplo 12500,50."
+          valor={valores.precio}
+          onCambiar={cambiar("precio")}
+          error={errores.precio}
+        />
+        <FormField id="producto-minimo" etiqueta="Stock mínimo" error={errores.stockMinimo}>
+          <Input
+            {...propsCampo("producto-minimo", errores.stockMinimo)}
+            type="number"
+            min={0}
+            step={1}
+            value={valores.stockMinimo}
+            onChange={(e) => cambiar("stockMinimo")(e.target.value)}
+            className="tabular-nums"
+          />
+        </FormField>
         {!edicion && (
-          <Campo etiqueta="Stock inicial (se registra como ingreso)" error={errores.stockInicial}>
-            <input type="number" min={0} step={1} value={valores.stockInicial} onChange={(e) => cambiar("stockInicial")(e.target.value)} className="rounded border px-2 py-1" />
-          </Campo>
+          <FormField id="producto-inicial" etiqueta="Stock inicial" ayuda="Se registra como un ingreso." error={errores.stockInicial}>
+            <Input
+              {...propsCampo("producto-inicial", errores.stockInicial, true)}
+              type="number"
+              min={0}
+              step={1}
+              value={valores.stockInicial}
+              onChange={(e) => cambiar("stockInicial")(e.target.value)}
+              className="tabular-nums"
+            />
+          </FormField>
         )}
       </div>
-      <button type="submit" disabled={enviando} className="w-fit rounded border px-3 py-1 disabled:opacity-50">
-        {enviando ? "Guardando…" : edicion ? "Guardar cambios" : "Crear producto"}
-      </button>
+      {errores[""] && <ErrorCampo>{errores[""]}</ErrorCampo>}
+      <DialogFooter className="-mx-4 -mb-4">
+        <Button type="button" variant="outline" onClick={onListo} disabled={enviando}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? "Guardando…" : edicion ? "Guardar cambios" : "Crear producto"}
+        </Button>
+      </DialogFooter>
     </form>
-  );
-}
-
-function Campo({ etiqueta, error, children }: { etiqueta: string; error?: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      {etiqueta}
-      {children}
-      {error && <span className="text-red-700">{error}</span>}
-    </label>
   );
 }

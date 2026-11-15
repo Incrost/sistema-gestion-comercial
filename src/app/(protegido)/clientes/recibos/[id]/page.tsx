@@ -6,29 +6,38 @@
  * recibo, fecha y hora, cliente, importe, medio, observación, usuario y el
  * saldo resultante HISTÓRICO guardado al registrar el pago (no el actual).
  * Los datos salen de obtenerPago(), igual que GET /api/pagos/{id}.
- *
- * PROVISORIO: diseño mínimo; los datos del comercio son de ejemplo.
+ * Al imprimir se ocultan la navegación y los botones.
  */
-import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { COMERCIO, COMERCIO_CON_DATOS_PROVISORIOS } from "@/config/comercio";
+import { Dato, ListaDatos } from "@/components/datos/lista-datos";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { BotonImprimir } from "@/components/impresion/boton-imprimir";
+import { PrintHeader } from "@/components/impresion/print-header";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Fila, Texto } from "@/components/layout/primitivas";
+import { Card, CardContent } from "@/components/ui/card";
 import { normalizarError } from "@/lib/api-error";
-import { formatearDocumento, formatearFechaHora, formatearMoneda } from "@/lib/formatos";
+import { formatearFechaHora, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
 import { ETIQUETAS_MEDIO_PAGO } from "@/lib/validacion-pagos";
 import { obtenerPago } from "@/servicios/pagos";
 
-import { BotonImprimir } from "./boton-imprimir";
+export const metadata: Metadata = { title: "Recibo" };
 
 type Props = { params: Promise<{ id: string }> };
 
 export default function PaginaRecibo(props: Props) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando recibo…</p>}>
-      <Recibo {...props} />
-    </Suspense>
+    <PageContainer ancho="documento">
+      <Suspense fallback={<LoadingState variante="ficha" texto="Cargando recibo…" />}>
+        <Recibo {...props} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -42,52 +51,44 @@ async function Recibo({ params }: Props) {
   } catch (error) {
     const apiError = normalizarError(error);
     if (apiError.code === "NO_ENCONTRADO" || apiError.code === "VALIDACION") notFound();
-    return (
-      <p role="alert" className="text-red-700">
-        {apiError.message}
-      </p>
-    );
+    return <ErrorState titulo="No se pudo cargar el recibo" mensaje={apiError.message} volver={{ href: "/clientes", texto: "Volver a clientes" }} />;
   }
 
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex gap-4 print:hidden">
-        <Link href={`/clientes/${pago.cliente.id}`} className="text-sm underline">
-          ← Volver a la ficha del cliente
-        </Link>
-      </div>
+    <>
+      <PageHeader
+        className="print:hidden"
+        volver={{ href: `/clientes/${pago.cliente.id}`, texto: "Volver a la ficha del cliente" }}
+        titulo={`Recibo ${pago.numeroRecibo}`}
+        acciones={<BotonImprimir texto="Imprimir recibo" />}
+      />
 
-      <article className="flex max-w-xl flex-col gap-4 rounded border p-6">
-        <header className="flex flex-col gap-1 border-b pb-3">
-          <p className="text-lg font-semibold">{COMERCIO.nombreComercial}</p>
-          <p className="text-sm">{COMERCIO.razonSocial}</p>
-          <p className="text-sm">CUIT {formatearDocumento("CUIT", COMERCIO.cuit)}</p>
-          <p className="text-sm">{COMERCIO.domicilio}</p>
-          {COMERCIO_CON_DATOS_PROVISORIOS && <p className="text-xs italic">Datos del comercio provisorios.</p>}
-        </header>
+      <Card className="shadow-suave print:ring-0">
+        <CardContent className="flex flex-col gap-6 sm:px-8 sm:py-4 print:px-0">
+          <PrintHeader tipo="Recibo" numero={pago.numeroRecibo}>
+            <Texto>Fecha y hora: {formatearFechaHora(pago.fecha)}</Texto>
+          </PrintHeader>
 
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold">Recibo {pago.numeroRecibo}</h1>
-          <p className="text-sm">Fecha y hora: {formatearFechaHora(pago.fecha)}</p>
-        </div>
+          <Fila justificar="between" alinear="baseline" gap="xs" className="rounded-lg bg-success-soft p-4 text-success-strong print:bg-transparent print:p-0 print:text-black">
+            <Texto as="span" className="text-current">Recibimos de {pago.cliente.nombre} la suma de</Texto>
+            <Texto as="span" peso="fuerte" numerico className="text-2xl text-current">
+              {formatearMoneda(pago.importe)}
+            </Texto>
+          </Fila>
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          <dt className="font-medium">Cliente</dt>
-          <dd>{pago.cliente.nombre}</dd>
-          <dt className="font-medium">Importe</dt>
-          <dd className="font-semibold">{formatearMoneda(pago.importe)}</dd>
-          <dt className="font-medium">Medio de pago</dt>
-          <dd>{ETIQUETAS_MEDIO_PAGO[pago.medio]}</dd>
-          <dt className="font-medium">Observación</dt>
-          <dd>{pago.observacion ?? "—"}</dd>
-          <dt className="font-medium">Atendió</dt>
-          <dd>{pago.usuario.nombre}</dd>
-          <dt className="font-medium">Saldo después del pago</dt>
-          <dd>{formatearMoneda(pago.saldoCliente)}</dd>
-        </dl>
-      </article>
-
-      <BotonImprimir />
-    </section>
+          <ListaDatos>
+            <Dato etiqueta="Cliente">{pago.cliente.nombre}</Dato>
+            <Dato etiqueta="Medio de pago">{ETIQUETAS_MEDIO_PAGO[pago.medio]}</Dato>
+            <Dato etiqueta="Observación">{pago.observacion ?? "—"}</Dato>
+            <Dato etiqueta="Atendió">{pago.usuario.nombre}</Dato>
+            <Dato etiqueta="Saldo después del pago">
+              <Texto as="span" peso="fuerte" numerico>
+                {formatearMoneda(pago.saldoCliente)}
+              </Texto>
+            </Dato>
+          </ListaDatos>
+        </CardContent>
+      </Card>
+    </>
   );
 }

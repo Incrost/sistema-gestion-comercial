@@ -6,41 +6,84 @@
  * Server Component: llama al servicio, que verifica el rol. Al vendedor un
  * cliente inactivo le responde «no encontrado».
  *
- * Cuenta corriente (RF-C4): saldo y últimos movimientos con saldo acumulado;
- * el historial completo con filtros está en /clientes/[id]/cuenta.
- * Registro de pagos (RF-C5): el formulario aparece solo si el cliente está
- * activo, tiene cuenta corriente y debe dinero (el servidor lo vuelve a verificar).
- *
- * PROVISORIO: interfaz mínima para verificar el módulo.
+ * Cuenta corriente (RF-C4): pestaña con el saldo y los últimos movimientos
+ * con saldo acumulado; el historial completo con filtros está en
+ * /clientes/[id]/cuenta. Registro de pagos (RF-C5): el formulario aparece
+ * solo si el cliente está activo, tiene cuenta corriente y debe dinero (el
+ * servidor lo vuelve a verificar).
  */
+import { CircleDollarSignIcon, CreditCardIcon, FileTextIcon, HistoryIcon, ScaleIcon, WalletIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { Dato, ListaDatos } from "@/components/datos/lista-datos";
+import { MetricCard } from "@/components/datos/metric-card";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { EmptyState } from "@/components/estados/empty-state";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Grilla, Pila, Texto, Titulo } from "@/components/layout/primitivas";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { normalizarError } from "@/lib/api-error";
-import { formatearFechaHora, formatearMoneda } from "@/lib/formatos";
+import { formatearDocumento, formatearFechaHora, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
-import { obtenerCliente } from "@/servicios/clientes";
+import { ETIQUETAS_FORMA_PAGO } from "@/lib/validacion-facturas";
+import { obtenerCliente, type FacturaResumen } from "@/servicios/clientes";
 import { obtenerCuentaCorriente } from "@/servicios/cuenta-corriente";
 import { tieneRol } from "@/servicios/permisos";
 
-import { BotonEstadoCliente, FormularioCliente } from "../formulario-cliente";
+import { BotonEstadoCliente, DialogoCliente } from "../formulario-cliente";
 
 import { FormularioPago } from "./formulario-pago";
 import { TablaMovimientos } from "./tabla-movimientos";
+
+export const metadata: Metadata = { title: "Ficha del cliente" };
 
 type Props = { params: Promise<{ id: string }> };
 
 /** Movimientos que muestra la ficha (los más recientes, con su saldo acumulado). */
 const MOVIMIENTOS_EN_FICHA = 10;
 
-const NOMBRES_FORMA = { contado: "Contado", tarjeta: "Tarjeta", cuenta_corriente: "Cuenta corriente" };
+const COLUMNAS_FACTURAS: Columna<FacturaResumen>[] = [
+  {
+    id: "numero",
+    encabezado: "Número",
+    principal: true,
+    celda: (f) => (
+      <Link href={`/ventas/${f.id}`} className="font-mono font-medium text-primary hover:underline">
+        {f.numero}
+      </Link>
+    ),
+  },
+  { id: "fecha", encabezado: "Fecha y hora", celda: (f) => formatearFechaHora(f.fecha) },
+  { id: "forma", encabezado: "Forma de pago", celda: (f) => ETIQUETAS_FORMA_PAGO[f.formaPago] },
+  {
+    id: "total",
+    encabezado: "Total",
+    alinear: "derecha",
+    celda: (f) => (
+      <Texto as="span" numerico className={f.estado === "anulada" ? "text-muted-foreground line-through" : undefined}>
+        {formatearMoneda(f.total)}
+      </Texto>
+    ),
+  },
+  { id: "estado", encabezado: "Estado", celda: (f) => <StatusBadge estado={f.estado} /> },
+];
 
 export default function PaginaCliente(props: Props) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando cliente…</p>}>
-      <Ficha {...props} />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState variante="ficha" texto="Cargando cliente…" />}>
+        <Ficha {...props} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -55,11 +98,7 @@ async function Ficha({ params }: Props) {
   } catch (error) {
     const apiError = normalizarError(error);
     if (apiError.code === "NO_ENCONTRADO") notFound();
-    return (
-      <p role="alert" className="text-red-700">
-        {apiError.message}
-      </p>
-    );
+    return <ErrorState titulo="No se pudo cargar el cliente" mensaje={apiError.message} volver={{ href: "/clientes", texto: "Volver al listado" }} />;
   }
   const { ultimasFacturas, ...cliente } = ficha;
 
@@ -69,104 +108,140 @@ async function Ficha({ params }: Props) {
   const puedePagar = cliente.activo && cliente.cuentaCorriente && cliente.saldo > 0;
 
   return (
-    <section className="flex flex-col gap-6">
-      <Link href="/clientes" className="text-sm underline">
-        ← Volver al listado
-      </Link>
-
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">{cliente.nombre}</h1>
-        {!cliente.activo && <span className="w-fit rounded bg-gray-200 px-2 py-0.5 text-sm">Inactivo</span>}
-        <dl className="grid w-fit grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          <dt className="font-medium">Documento</dt>
-          <dd className="font-mono">
-            {cliente.tipoDoc} {cliente.nroDoc}
-          </dd>
-          <dt className="font-medium">Domicilio</dt>
-          <dd>{cliente.domicilio ?? "—"}</dd>
-          <dt className="font-medium">Teléfono</dt>
-          <dd>{cliente.telefono ?? "—"}</dd>
-          <dt className="font-medium">Email</dt>
-          <dd>{cliente.email ?? "—"}</dd>
-          <dt className="font-medium">Cuenta corriente</dt>
-          <dd>{cliente.cuentaCorriente ? "Habilitada" : "No habilitada"}</dd>
-          <dt className="font-medium">Saldo actual</dt>
-          <dd>{formatearMoneda(cliente.saldo)}</dd>
-          <dt className="font-medium">Límite de crédito</dt>
-          <dd>{cliente.limiteCredito === null ? "Sin límite" : formatearMoneda(cliente.limiteCredito)}</dd>
-          <dt className="font-medium">Crédito disponible</dt>
-          <dd>{cliente.disponible === null ? "Sin límite" : formatearMoneda(cliente.disponible)}</dd>
-        </dl>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">Últimas facturas</h2>
-        {ultimasFacturas.length === 0 ? (
-          <p className="text-sm">El cliente todavía no tiene facturas.</p>
-        ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 pr-3">Número</th>
-                <th className="py-2 pr-3">Fecha y hora</th>
-                <th className="py-2 pr-3">Forma de pago</th>
-                <th className="py-2 pr-3 text-right">Total</th>
-                <th className="py-2 pr-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ultimasFacturas.map((f) => (
-                <tr key={f.id} className="border-b">
-                  <td className="py-2 pr-3 font-mono">{f.numero}</td>
-                  <td className="py-2 pr-3">{formatearFechaHora(f.fecha)}</td>
-                  <td className="py-2 pr-3">{NOMBRES_FORMA[f.formaPago]}</td>
-                  <td className="py-2 pr-3 text-right">{formatearMoneda(f.total)}</td>
-                  <td className="py-2 pr-3">{f.estado === "anulada" ? "Anulada" : "Emitida"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">Cuenta corriente</h2>
-        {cuenta === null ? (
-          <p className="text-sm">El cliente está dado de baja: su cuenta corriente no se consulta.</p>
-        ) : (
+    <>
+      <PageHeader
+        volver={{ href: "/clientes", texto: "Volver al listado" }}
+        titulo={cliente.nombre}
+        descripcion={`${cliente.tipoDoc} ${formatearDocumento(cliente.tipoDoc, cliente.nroDoc)}`}
+        insignias={
           <>
-            <p className="text-sm">
-              Saldo actual: <strong>{formatearMoneda(cuenta.saldo)}</strong>
-              {cuenta.movimientos.length > recientes.length &&
-                ` · se muestran los últimos ${recientes.length} de ${cuenta.movimientos.length} movimientos`}
-              {" · "}
-              <Link href={`/clientes/${cliente.id}/cuenta`} className="underline">
-                Ver cuenta completa y filtrar por fechas
-              </Link>
-            </p>
-            {recientes.length === 0 ? (
-              <p className="text-sm">La cuenta corriente no tiene movimientos.</p>
-            ) : (
-              <TablaMovimientos movimientos={recientes} />
-            )}
+            <StatusBadge estado={cliente.activo ? "activo" : "inactivo"} />
+            <StatusBadge estado={cliente.cuentaCorriente ? "cuenta-corriente" : "sin-cuenta"} />
           </>
-        )}
-        {puedePagar ? (
-          <FormularioPago clienteId={cliente.id} saldo={cliente.saldo} />
-        ) : (
-          cliente.activo && (
-            <p className="text-sm opacity-75">
-              {cliente.cuentaCorriente
-                ? "Sin deuda pendiente: no hay pagos para registrar."
-                : "El cliente no tiene la cuenta corriente habilitada."}
-            </p>
-          )
-        )}
-      </div>
+        }
+        acciones={
+          <>
+            {/* key: al cambiar los datos guardados, el formulario se reinicia con ellos. */}
+            <DialogoCliente key={JSON.stringify(cliente)} cliente={cliente} />
+            {esAdmin && <BotonEstadoCliente cliente={cliente} />}
+          </>
+        }
+      />
 
-      {esAdmin && <BotonEstadoCliente cliente={cliente} />}
-      {/* key: al cambiar los datos guardados, el formulario se reinicia con ellos. */}
-      <FormularioCliente key={JSON.stringify(cliente)} cliente={cliente} />
-    </section>
+      <Grilla columnas="3">
+        <MetricCard
+          titulo="Saldo actual (deuda)"
+          valor={formatearMoneda(cliente.saldo)}
+          icono={ScaleIcon}
+          tono={cliente.saldo > 0 ? "advertencia" : "exito"}
+        >
+          {cliente.saldo > 0 ? "Tiene deuda pendiente." : "Sin deuda pendiente."}
+        </MetricCard>
+        <MetricCard titulo="Límite de crédito" valor={cliente.limiteCredito === null ? "Sin límite" : formatearMoneda(cliente.limiteCredito)} icono={CreditCardIcon} />
+        <MetricCard titulo="Crédito disponible" valor={cliente.disponible === null ? "Sin límite" : formatearMoneda(cliente.disponible)} icono={CircleDollarSignIcon} />
+      </Grilla>
+
+      <Tabs defaultValue="resumen" className="gap-4">
+        <TabsList className="w-full sm:w-fit">
+          <TabsTrigger value="resumen">
+            <FileTextIcon aria-hidden />
+            Datos y facturas
+          </TabsTrigger>
+          <TabsTrigger value="cuenta">
+            <WalletIcon aria-hidden />
+            Cuenta corriente
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="resumen" className="flex flex-col gap-6">
+          <Card className="shadow-suave">
+            <CardHeader>
+              <CardTitle>
+                <Titulo nivel={2}>Datos del cliente</Titulo>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ListaDatos columnas="3">
+                <Dato etiqueta="Documento">
+                  {cliente.tipoDoc} {formatearDocumento(cliente.tipoDoc, cliente.nroDoc)}
+                </Dato>
+                <Dato etiqueta="Domicilio">{cliente.domicilio ?? "—"}</Dato>
+                <Dato etiqueta="Teléfono">{cliente.telefono ?? "—"}</Dato>
+                <Dato etiqueta="Email">{cliente.email ?? "—"}</Dato>
+                <Dato etiqueta="Cuenta corriente">{cliente.cuentaCorriente ? "Habilitada" : "No habilitada"}</Dato>
+              </ListaDatos>
+            </CardContent>
+          </Card>
+
+          <Pila gap="sm">
+            <Titulo nivel={2}>Últimas facturas</Titulo>
+            <DataTable
+              etiqueta="Últimas facturas"
+              columnas={COLUMNAS_FACTURAS}
+              filas={ultimasFacturas}
+              clave={(f) => f.id}
+              vacio={<EmptyState compacto icono={FileTextIcon} titulo="El cliente todavía no tiene facturas." />}
+            />
+          </Pila>
+        </TabsContent>
+
+        <TabsContent value="cuenta">
+          <Grilla columnas="principal" className="items-start">
+            <Pila gap="sm" className="lg:col-span-2">
+              <Pila gap="xs">
+                <Titulo nivel={2}>Movimientos recientes</Titulo>
+                {cuenta && (
+                  <Texto tono="suave">
+                    Saldo actual:{" "}
+                    <Texto as="span" peso="fuerte" numerico>
+                      {formatearMoneda(cuenta.saldo)}
+                    </Texto>
+                    {cuenta.movimientos.length > recientes.length &&
+                      ` · se muestran los últimos ${recientes.length} de ${cuenta.movimientos.length} movimientos`}
+                  </Texto>
+                )}
+              </Pila>
+              {cuenta === null ? (
+                <EmptyState compacto titulo="El cliente está dado de baja: su cuenta corriente no se consulta." />
+              ) : recientes.length === 0 ? (
+                <EmptyState compacto icono={HistoryIcon} titulo="La cuenta corriente no tiene movimientos." />
+              ) : (
+                <TablaMovimientos movimientos={recientes} />
+              )}
+              {cuenta && (
+                <Button asChild variant="outline" className="w-fit">
+                  <Link href={`/clientes/${cliente.id}/cuenta`}>
+                    <HistoryIcon aria-hidden />
+                    Ver cuenta completa y filtrar por fechas
+                  </Link>
+                </Button>
+              )}
+            </Pila>
+
+            <Card className="shadow-suave">
+              <CardHeader className="border-b">
+                <CardTitle>
+                  <Titulo nivel={2}>Registrar pago</Titulo>
+                </CardTitle>
+                <CardDescription>Genera un recibo numerado e imprimible.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {puedePagar ? (
+                  <FormularioPago clienteId={cliente.id} saldo={cliente.saldo} />
+                ) : (
+                  <Texto tono="suave">
+                    {!cliente.activo
+                      ? "El cliente está dado de baja."
+                      : cliente.cuentaCorriente
+                        ? "Sin deuda pendiente: no hay pagos para registrar."
+                        : "El cliente no tiene la cuenta corriente habilitada."}
+                  </Texto>
+                )}
+              </CardContent>
+            </Card>
+          </Grilla>
+        </TabsContent>
+      </Tabs>
+    </>
   );
 }

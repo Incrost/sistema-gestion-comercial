@@ -5,23 +5,37 @@
  * Server Component: llama a los servicios, que verifican el rol. Al vendedor
  * un producto inactivo le responde «no encontrado». El historial pagina con
  * `?page=` en la URL.
- *
- * PROVISORIO: interfaz mínima para verificar el módulo.
  */
+import { BoxesIcon, DollarSignIcon, HistoryIcon, ShieldAlertIcon, TagIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { MetricCard } from "@/components/datos/metric-card";
+import { Pagination } from "@/components/datos/pagination";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { EmptyState } from "@/components/estados/empty-state";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Grilla, Pila, Texto, Titulo } from "@/components/layout/primitivas";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { normalizarError } from "@/lib/api-error";
 import { formatearFechaHora, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
 import { listarCategorias } from "@/servicios/categorias";
 import { tieneRol } from "@/servicios/permisos";
 import { obtenerProducto } from "@/servicios/productos";
-import { listarMovimientosProducto } from "@/servicios/stock";
+import { listarMovimientosProducto, type MovimientoPublico } from "@/servicios/stock";
 
-import { FormularioProducto } from "../formulario-producto";
+import { DialogoProducto } from "../formulario-producto";
 import { BotonEstadoProducto, FormularioMovimiento } from "./acciones-producto";
+
+export const metadata: Metadata = { title: "Ficha del producto" };
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -31,12 +45,52 @@ type Props = {
 const TAMANIO_PAGINA = 10;
 
 const NOMBRES_TIPO = { ingreso: "Ingreso", egreso: "Egreso", venta: "Venta", anulacion: "Anulación" };
+const VARIANTE_TIPO = { ingreso: "success", egreso: "warning", venta: "secondary", anulacion: "outline" } as const;
+
+const COLUMNAS: Columna<MovimientoPublico>[] = [
+  { id: "fecha", encabezado: "Fecha y hora", principal: true, celda: (m) => formatearFechaHora(m.fecha) },
+  { id: "tipo", encabezado: "Tipo", celda: (m) => <Badge variant={VARIANTE_TIPO[m.tipo]}>{NOMBRES_TIPO[m.tipo]}</Badge> },
+  {
+    id: "cantidad",
+    encabezado: "Cantidad",
+    alinear: "derecha",
+    celda: (m) => (
+      <Texto as="span" numerico tono={m.cantidad > 0 ? "exito" : "destructivo"}>
+        {m.cantidad > 0 ? `+${m.cantidad}` : m.cantidad}
+      </Texto>
+    ),
+  },
+  { id: "resultante", encabezado: "Existencia resultante", alinear: "derecha", celda: (m) => m.existenciaResultante },
+  {
+    id: "motivo",
+    encabezado: "Motivo",
+    className: "whitespace-normal min-w-40",
+    celda: (m) => (
+      <>
+        {m.motivo}
+        {m.observacion && (
+          <Texto tamanio="xs" tono="suave">
+            {m.observacion}
+          </Texto>
+        )}
+      </>
+    ),
+  },
+  { id: "usuario", encabezado: "Usuario", celda: (m) => m.usuario.nombre },
+  { id: "factura", encabezado: "Factura", celda: (m) => (
+      <Texto as="span" tamanio="xs" className="font-mono">
+        {m.referencia?.numero ?? "—"}
+      </Texto>
+    ) },
+];
 
 export default function PaginaProducto(props: Props) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando producto…</p>}>
-      <Ficha {...props} />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState variante="ficha" texto="Cargando producto…" />}>
+        <Ficha {...props} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -57,96 +111,105 @@ async function Ficha({ params, searchParams }: Props) {
   } catch (error) {
     const apiError = normalizarError(error);
     if (apiError.code === "NO_ENCONTRADO") notFound();
-    return (
-      <p role="alert" className="text-red-700">
-        {apiError.message}
-      </p>
-    );
+    return <ErrorState titulo="No se pudo cargar el producto" mensaje={apiError.message} volver={{ href: "/productos", texto: "Volver al catálogo" }} />;
   }
   const categorias = esAdmin ? await listarCategorias(usuario) : [];
   const totalPaginas = Math.max(1, Math.ceil(movimientos.total / movimientos.pageSize));
   const enlace = (page: number) => `/productos/${producto.id}${page > 1 ? `?page=${page}` : ""}`;
 
   return (
-    <section className="flex flex-col gap-6">
-      <Link href="/productos" className="text-sm underline">
-        ← Volver al catálogo
-      </Link>
+    <>
+      <PageHeader
+        volver={{ href: "/productos", texto: "Volver al catálogo" }}
+        titulo={producto.descripcion}
+        descripcion={
+          <Texto as="span" tono="suave" className="font-mono">
+            {producto.codigo}
+          </Texto>
+        }
+        insignias={
+          <>
+            {producto.bajoMinimo && <StatusBadge estado="bajo-minimo" />}
+            <StatusBadge estado={producto.activo ? "activo" : "inactivo"} />
+          </>
+        }
+        acciones={
+          esAdmin && (
+            <>
+              {/* key: al cambiar los datos guardados, el formulario se reinicia con ellos. */}
+              <DialogoProducto key={JSON.stringify(producto)} categorias={categorias} producto={producto} />
+              <BotonEstadoProducto producto={producto} />
+            </>
+          )
+        }
+      />
 
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">
-          <span className="font-mono">{producto.codigo}</span> · {producto.descripcion}
-        </h1>
-        <div className="flex flex-wrap gap-2 text-sm">
-          {producto.bajoMinimo && <span className="rounded bg-amber-200 px-2 py-0.5 text-amber-900">Bajo mínimo</span>}
-          {!producto.activo && <span className="rounded bg-gray-200 px-2 py-0.5">Inactivo</span>}
-        </div>
-        <dl className="grid w-fit grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          <dt className="font-medium">Categoría</dt>
-          <dd>{producto.categoria.nombre}</dd>
-          <dt className="font-medium">Precio</dt>
-          <dd>{formatearMoneda(producto.precio)}</dd>
-          <dt className="font-medium">Existencia</dt>
-          <dd>{producto.existencia}</dd>
-          <dt className="font-medium">Stock mínimo</dt>
-          <dd>{producto.stockMinimo}</dd>
-        </dl>
-      </div>
+      <Grilla columnas="4">
+        <MetricCard titulo="Precio de venta" valor={formatearMoneda(producto.precio)} icono={DollarSignIcon} />
+        <MetricCard
+          titulo="Existencia"
+          valor={String(producto.existencia)}
+          icono={BoxesIcon}
+          tono={producto.bajoMinimo ? "advertencia" : "exito"}
+        >
+          {producto.bajoMinimo ? "Por debajo del mínimo: conviene reponer." : "Existencia suficiente."}
+        </MetricCard>
+        <MetricCard titulo="Stock mínimo" valor={String(producto.stockMinimo)} icono={ShieldAlertIcon} />
+        <MetricCard titulo="Categoría" valor={producto.categoria.nombre} icono={TagIcon} />
+      </Grilla>
 
-      {esAdmin && (
-        <div className="flex flex-col gap-4">
-          <BotonEstadoProducto producto={producto} />
-          <FormularioMovimiento productoId={producto.id} />
-          {/* key: al cambiar los datos guardados, el formulario se reinicia con ellos. */}
-          <FormularioProducto key={JSON.stringify(producto)} categorias={categorias} producto={producto} />
-        </div>
-      )}
+      <Grilla columnas="principal" className="items-start">
+        <Pila gap="md" className="lg:col-span-2">
+          <Pila gap="xs">
+            <Titulo nivel={2} className="flex items-center gap-2">
+              <HistoryIcon aria-hidden className="size-4 text-muted-foreground" />
+              Movimientos de stock
+            </Titulo>
+            <Texto tono="suave">Del más reciente al más antiguo.</Texto>
+          </Pila>
+          <DataTable
+            etiqueta="Movimientos de stock"
+            columnas={COLUMNAS}
+            filas={movimientos.data}
+            clave={(m) => m.id}
+            vacio={<EmptyState compacto icono={HistoryIcon} titulo="El producto todavía no tiene movimientos." />}
+          />
+          <Pagination
+            etiqueta="Paginación de movimientos"
+            pagina={movimientos.page}
+            totalPaginas={totalPaginas}
+            total={movimientos.total}
+            unidad={["movimiento", "movimientos"]}
+            enlace={enlace}
+            textoAnterior="Más nuevos"
+            textoSiguiente="Más viejos"
+          />
+        </Pila>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">Movimientos de stock</h2>
-        {movimientos.data.length === 0 ? (
-          <p className="text-sm">El producto todavía no tiene movimientos.</p>
+        {esAdmin ? (
+          <Card className="shadow-suave lg:sticky lg:top-20">
+            <CardHeader className="border-b">
+              <CardTitle>
+                <Titulo nivel={2}>Ingreso o egreso de stock</Titulo>
+              </CardTitle>
+              <CardDescription>La existencia solo cambia con movimientos registrados.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FormularioMovimiento producto={producto} />
+            </CardContent>
+          </Card>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="py-2 pr-3">Fecha y hora</th>
-                  <th className="py-2 pr-3">Tipo</th>
-                  <th className="py-2 pr-3 text-right">Cantidad</th>
-                  <th className="py-2 pr-3 text-right">Existencia resultante</th>
-                  <th className="py-2 pr-3">Motivo</th>
-                  <th className="py-2 pr-3">Usuario</th>
-                  <th className="py-2 pr-3">Factura</th>
-                </tr>
-              </thead>
-              <tbody>
-                {movimientos.data.map((m) => (
-                  <tr key={m.id} className="border-b">
-                    <td className="py-2 pr-3">{formatearFechaHora(m.fecha)}</td>
-                    <td className="py-2 pr-3">{NOMBRES_TIPO[m.tipo]}</td>
-                    <td className="py-2 pr-3 text-right">{m.cantidad > 0 ? `+${m.cantidad}` : m.cantidad}</td>
-                    <td className="py-2 pr-3 text-right">{m.existenciaResultante}</td>
-                    <td className="py-2 pr-3">
-                      {m.motivo}
-                      {m.observacion && <span className="block text-xs opacity-70">{m.observacion}</span>}
-                    </td>
-                    <td className="py-2 pr-3">{m.usuario.nombre}</td>
-                    <td className="py-2 pr-3">{m.referencia?.numero ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Card className="shadow-suave">
+            <CardContent className="text-sm text-muted-foreground">
+              Los ingresos, egresos y cambios de datos los registra un administrador.{" "}
+              <Link href="/productos" className="font-medium text-primary hover:underline">
+                Volver al catálogo
+              </Link>
+              .
+            </CardContent>
+          </Card>
         )}
-        <nav className="flex items-center gap-3 text-sm" aria-label="Paginación de movimientos">
-          {movimientos.page > 1 ? <Link href={enlace(movimientos.page - 1)} className="underline">Más nuevos</Link> : <span className="opacity-50">Más nuevos</span>}
-          <span>
-            Página {movimientos.page} de {totalPaginas} · {movimientos.total} movimiento(s)
-          </span>
-          {movimientos.page < totalPaginas ? <Link href={enlace(movimientos.page + 1)} className="underline">Más viejos</Link> : <span className="opacity-50">Más viejos</span>}
-        </nav>
-      </div>
-    </section>
+      </Grilla>
+    </>
   );
 }

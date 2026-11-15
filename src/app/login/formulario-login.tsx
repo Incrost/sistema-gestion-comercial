@@ -3,11 +3,17 @@
 /**
  * Formulario de inicio de sesión. Consume POST /api/auth/login: la cookie de
  * sesión la deja el servidor (httpOnly); aquí no se guarda nada en
- * localStorage ni sessionStorage.
+ * localStorage ni sessionStorage. El error queda visible dentro del
+ * formulario (no es una notificación temporal) hasta el próximo intento.
  */
+import { CircleAlertIcon, LogInIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { FormField } from "@/components/formularios/form-field";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { RespuestaError } from "@/lib/api-error";
 
 export function FormularioLogin({ destino }: { destino: string }) {
@@ -41,39 +47,23 @@ export function FormularioLogin({ destino }: { destino: string }) {
   }
 
   return (
-    <form onSubmit={enviar} className="flex flex-col gap-3" noValidate>
-      <label className="flex flex-col gap-1 text-sm">
-        Correo electrónico
-        <input
-          name="email"
-          type="email"
-          autoComplete="username"
-          required
-          className="rounded border px-3 py-2"
-        />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        Contraseña
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          className="rounded border px-3 py-2"
-        />
-      </label>
+    <form onSubmit={enviar} className="flex flex-col gap-4" noValidate aria-describedby={error ? "error-login" : undefined}>
+      <FormField id="login-email" etiqueta="Correo electrónico">
+        <Input id="login-email" name="email" type="email" autoComplete="username" required aria-invalid={error ? true : undefined} />
+      </FormField>
+      <FormField id="login-password" etiqueta="Contraseña">
+        <Input id="login-password" name="password" type="password" autoComplete="current-password" required aria-invalid={error ? true : undefined} />
+      </FormField>
       {error && (
-        <p role="alert" className="text-sm text-red-700">
-          {error}
-        </p>
+        <Alert variant="destructive" id="error-login">
+          <CircleAlertIcon aria-hidden />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
-      <button
-        type="submit"
-        disabled={enviando}
-        className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
-      >
+      <Button type="submit" size="lg" disabled={enviando} className="w-full">
+        <LogInIcon aria-hidden />
         {enviando ? "Ingresando…" : "Ingresar"}
-      </button>
+      </Button>
     </form>
   );
 }

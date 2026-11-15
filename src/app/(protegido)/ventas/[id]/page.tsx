@@ -10,38 +10,59 @@
  * Cuenta corriente: solo se indica la forma de pago. El saldo de la venta no
  * se guarda en la factura y no se inventa (el saldo actual está en la ficha).
  *
- * Al imprimir se ocultan la navegación y los botones (`print:hidden`); el
- * comprobante se conserva completo.
- *
- * PROVISORIO: diseño mínimo; los datos del comercio son de ejemplo.
+ * Al imprimir se ocultan el panel lateral, la barra superior y los botones
+ * (`print:hidden`); el comprobante se conserva completo y «ANULADA» sigue visible.
  */
-import Link from "next/link";
+import { BanIcon } from "lucide-react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { COMERCIO, COMERCIO_CON_DATOS_PROVISORIOS } from "@/config/comercio";
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { Dato, ListaDatos } from "@/components/datos/lista-datos";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { BotonImprimir } from "@/components/impresion/boton-imprimir";
+import { PrintHeader } from "@/components/impresion/print-header";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Pila, Texto, Titulo } from "@/components/layout/primitivas";
+import { Card, CardContent } from "@/components/ui/card";
 import { normalizarError } from "@/lib/api-error";
 import { formatearDocumento, formatearFechaHora, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
-import {
-  ETIQUETAS_ESTADO_FACTURA,
-  ETIQUETAS_FORMA_PAGO,
-  ETIQUETAS_TIPO_TARJETA,
-  NOMBRE_CONSUMIDOR_FINAL,
-} from "@/lib/validacion-facturas";
+import { ETIQUETAS_FORMA_PAGO, ETIQUETAS_TIPO_TARJETA, NOMBRE_CONSUMIDOR_FINAL } from "@/lib/validacion-facturas";
 import { obtenerFactura, type FacturaPublica } from "@/servicios/facturas";
 import { tieneRol } from "@/servicios/permisos";
 
 import { AccionAnular } from "../accion-anular";
-import { BotonImprimir } from "./boton-imprimir";
+
+export const metadata: Metadata = { title: "Comprobante" };
 
 type Props = { params: Promise<{ id: string }> };
 
+type Item = FacturaPublica["items"][number];
+
+const COLUMNAS: Columna<Item>[] = [
+  { id: "codigo", encabezado: "Código", celda: (i) => (
+      <Texto as="span" tamanio="xs" className="font-mono">
+        {i.codigo}
+      </Texto>
+    ) },
+  { id: "descripcion", encabezado: "Descripción", className: "whitespace-normal min-w-40", celda: (i) => i.descripcion },
+  { id: "cantidad", encabezado: "Cantidad", alinear: "derecha", celda: (i) => i.cantidad },
+  { id: "precio", encabezado: "Precio unitario", alinear: "derecha", celda: (i) => formatearMoneda(i.precioUnitario) },
+  { id: "subtotal", encabezado: "Subtotal", alinear: "derecha", celda: (i) => formatearMoneda(i.subtotal) },
+];
+
 export default function PaginaComprobante(props: Props) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando comprobante…</p>}>
-      <Comprobante {...props} />
-    </Suspense>
+    <PageContainer ancho="documento">
+      <Suspense fallback={<LoadingState variante="ficha" texto="Cargando comprobante…" />}>
+        <Comprobante {...props} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -55,143 +76,100 @@ async function Comprobante({ params }: Props) {
   } catch (error) {
     const apiError = normalizarError(error);
     if (apiError.code === "NO_ENCONTRADO" || apiError.code === "VALIDACION") notFound();
-    return (
-      <p role="alert" className="text-red-700">
-        {apiError.message}
-      </p>
-    );
+    return <ErrorState titulo="No se pudo cargar el comprobante" mensaje={apiError.message} volver={{ href: "/ventas", texto: "Volver al listado" }} />;
   }
 
   const anulada = factura.estado === "anulada";
 
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex gap-4 print:hidden">
-        <Link href="/ventas" className="text-sm underline">
-          ← Volver al listado de facturas
-        </Link>
-      </div>
+    <>
+      <PageHeader
+        className="print:hidden"
+        volver={{ href: "/ventas", texto: "Volver al listado de facturas" }}
+        titulo={`Factura ${factura.numeroFormateado}`}
+        insignias={<StatusBadge estado={factura.estado} />}
+        acciones={
+          <>
+            <BotonImprimir texto="Imprimir comprobante" />
+            {tieneRol(usuario, "admin") && !anulada && <AccionAnular facturaId={factura.id} numeroFormateado={factura.numeroFormateado} />}
+          </>
+        }
+      />
 
-      <article className="relative flex max-w-3xl flex-col gap-4 rounded border p-6">
-        {anulada && (
-          <p className="w-fit rounded border-2 border-red-700 px-3 py-1 text-2xl font-bold tracking-widest text-red-700">
-            ANULADA
-          </p>
-        )}
-
-        <header className="flex flex-wrap justify-between gap-4 border-b pb-3">
-          <div className="flex flex-col gap-1">
-            <p className="text-lg font-semibold">{COMERCIO.nombreComercial}</p>
-            <p className="text-sm">{COMERCIO.razonSocial}</p>
-            <p className="text-sm">CUIT {formatearDocumento("CUIT", COMERCIO.cuit)}</p>
-            <p className="text-sm">{COMERCIO.domicilio}</p>
-            {COMERCIO_CON_DATOS_PROVISORIOS && <p className="text-xs italic">Datos del comercio provisorios.</p>}
-          </div>
-          <div className="flex flex-col gap-1 text-sm sm:text-right">
-            <h1 className="text-xl font-semibold">Factura {factura.numeroFormateado}</h1>
-            <p>Fecha y hora: {formatearFechaHora(factura.fecha)}</p>
-            <p>Estado: {ETIQUETAS_ESTADO_FACTURA[factura.estado]}</p>
-            <p>Vendedor: {factura.vendedor.nombre}</p>
-            <p className="text-xs italic">Comprobante interno, sin validez fiscal.</p>
-          </div>
-        </header>
-
-        <div className="flex flex-col gap-1 text-sm">
-          <h2 className="font-semibold">Comprador</h2>
-          {factura.cliente === null ? (
-            <p>{NOMBRE_CONSUMIDOR_FINAL}</p>
-          ) : (
-            <>
-              <p>{factura.cliente.nombre}</p>
-              {factura.cliente.tipoDoc && factura.cliente.nroDoc && (
-                <p>
-                  {factura.cliente.tipoDoc} {formatearDocumento(factura.cliente.tipoDoc, factura.cliente.nroDoc)}
-                </p>
-              )}
-              {factura.cliente.domicilio && <p>{factura.cliente.domicilio}</p>}
-            </>
+      <Card className="relative shadow-suave print:ring-0">
+        <CardContent className="flex flex-col gap-6 sm:px-8 sm:py-4 print:px-0">
+          {anulada && (
+            <div
+              role="note"
+              className="flex items-center justify-center gap-2 rounded-md border-2 border-destructive py-2 text-2xl font-bold tracking-[0.3em] text-destructive print:border-black print:text-black"
+            >
+              <BanIcon aria-hidden className="size-6" />
+              ANULADA
+            </div>
           )}
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 pr-3">Código</th>
-                <th className="py-2 pr-3">Descripción</th>
-                <th className="py-2 pr-3 text-right">Cantidad</th>
-                <th className="py-2 pr-3 text-right">Precio unitario</th>
-                <th className="py-2 pr-3 text-right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {factura.items.map((item) => (
-                <tr key={item.productoId} className="border-b">
-                  <td className="py-2 pr-3 font-mono">{item.codigo}</td>
-                  <td className="py-2 pr-3">{item.descripcion}</td>
-                  <td className="py-2 pr-3 text-right">{item.cantidad}</td>
-                  <td className="py-2 pr-3 text-right">{formatearMoneda(item.precioUnitario)}</td>
-                  <td className="py-2 pr-3 text-right">{formatearMoneda(item.subtotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colSpan={4} className="py-2 pr-3 text-right font-semibold">
-                  Total
-                </td>
-                <td className="py-2 pr-3 text-right text-base font-semibold">{formatearMoneda(factura.total)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+          <PrintHeader tipo="Factura" numero={factura.numeroFormateado}>
+            <Texto>Fecha y hora: {formatearFechaHora(factura.fecha)}</Texto>
+            <Texto>Vendedor: {factura.vendedor.nombre}</Texto>
+            <Texto tamanio="xs" tono="suave" className="italic">
+              Comprobante interno, sin validez fiscal.
+            </Texto>
+          </PrintHeader>
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-          <dt className="font-medium">Forma de pago</dt>
-          <dd>{ETIQUETAS_FORMA_PAGO[factura.pago.forma]}</dd>
-          {factura.pago.forma === "contado" && (
-            <>
-              <dt className="font-medium">Monto recibido</dt>
-              <dd>{formatearMoneda(factura.pago.montoRecibido)}</dd>
-              <dt className="font-medium">Vuelto</dt>
-              <dd>{formatearMoneda(factura.pago.vuelto)}</dd>
-            </>
+          <Pila gap="xs">
+            <Titulo nivel={3}>Comprador</Titulo>
+            {factura.cliente === null ? (
+              <Texto>{NOMBRE_CONSUMIDOR_FINAL}</Texto>
+            ) : (
+              <>
+                <Texto peso="medio">{factura.cliente.nombre}</Texto>
+                {factura.cliente.tipoDoc && factura.cliente.nroDoc && (
+                  <Texto tono="suave">
+                    {factura.cliente.tipoDoc} {formatearDocumento(factura.cliente.tipoDoc, factura.cliente.nroDoc)}
+                  </Texto>
+                )}
+                {factura.cliente.domicilio && <Texto tono="suave">{factura.cliente.domicilio}</Texto>}
+              </>
+            )}
+          </Pila>
+
+          <DataTable
+            etiqueta="Detalle de la factura"
+            columnas={COLUMNAS}
+            filas={factura.items}
+            clave={(i) => i.productoId}
+            movil="desplazamiento"
+            anchoMinimo="min-w-[34rem]"
+            pie={{ etiqueta: "Total", valor: formatearMoneda(factura.total) }}
+          />
+
+          <ListaDatos className="rounded-lg bg-muted/50 p-4 print:bg-transparent print:p-0">
+            <Dato etiqueta="Forma de pago">{ETIQUETAS_FORMA_PAGO[factura.pago.forma]}</Dato>
+            {factura.pago.forma === "contado" && (
+              <>
+                <Dato etiqueta="Monto recibido">{formatearMoneda(factura.pago.montoRecibido)}</Dato>
+                <Dato etiqueta="Vuelto">{formatearMoneda(factura.pago.vuelto)}</Dato>
+              </>
+            )}
+            {factura.pago.forma === "tarjeta" && (
+              <Dato etiqueta="Tarjeta">
+                {ETIQUETAS_TIPO_TARJETA[factura.pago.tarjeta.tipo]} · {factura.pago.tarjeta.marca} · terminada en {factura.pago.tarjeta.ultimos4}
+              </Dato>
+            )}
+            {factura.pago.forma === "cuenta_corriente" && <Dato etiqueta="Detalle">Cargada a la cuenta corriente del cliente.</Dato>}
+          </ListaDatos>
+
+          {factura.anulacion && (
+            <ListaDatos className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 print:border-black print:bg-transparent">
+              <Dato etiqueta="Anulada el">{formatearFechaHora(factura.anulacion.fecha)}</Dato>
+              <Dato etiqueta="Anulada por">{factura.anulacion.usuario.nombre}</Dato>
+              <Dato etiqueta="Motivo" ancho>
+                {factura.anulacion.motivo}
+              </Dato>
+            </ListaDatos>
           )}
-          {factura.pago.forma === "tarjeta" && (
-            <>
-              <dt className="font-medium">Tarjeta</dt>
-              <dd>
-                {ETIQUETAS_TIPO_TARJETA[factura.pago.tarjeta.tipo]} · {factura.pago.tarjeta.marca} · terminada en{" "}
-                {factura.pago.tarjeta.ultimos4}
-              </dd>
-            </>
-          )}
-          {factura.pago.forma === "cuenta_corriente" && (
-            <>
-              <dt className="font-medium">Detalle</dt>
-              <dd>Cargada a la cuenta corriente del cliente.</dd>
-            </>
-          )}
-        </dl>
-
-        {factura.anulacion && (
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded border border-red-700 p-3 text-sm">
-            <dt className="font-medium">Anulada el</dt>
-            <dd>{formatearFechaHora(factura.anulacion.fecha)}</dd>
-            <dt className="font-medium">Anulada por</dt>
-            <dd>{factura.anulacion.usuario.nombre}</dd>
-            <dt className="font-medium">Motivo</dt>
-            <dd>{factura.anulacion.motivo}</dd>
-          </dl>
-        )}
-      </article>
-
-      <div className="flex flex-wrap items-start gap-3 print:hidden">
-        <BotonImprimir />
-        {tieneRol(usuario, "admin") && !anulada && (
-          <AccionAnular facturaId={factura.id} numeroFormateado={factura.numeroFormateado} />
-        )}
-      </div>
-    </section>
+        </CardContent>
+      </Card>
+    </>
   );
 }

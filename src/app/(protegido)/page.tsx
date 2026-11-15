@@ -6,69 +6,103 @@
  * GET /api/tablero (obtenerTablero) y GET /api/productos?bajoMinimo=true
  * (listarProductos). Cada bloque tiene su Suspense (estado de carga) y su
  * estado de error recuperable, así un fallo en uno no oculta el otro.
- *
- * PROVISORIO en lo visual: el diseño definitivo llega con el rediseño general.
  */
+import { ArrowRightIcon, ClipboardListIcon, PackageSearchIcon, ShoppingCartIcon, WalletIcon } from "lucide-react";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 
-import { CargandoBloque, CargandoTablero } from "@/components/tablero/cargando";
-import { EstadoError } from "@/components/tablero/estado-error";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Grilla, Pila, Texto, Titulo } from "@/components/layout/primitivas";
 import { GraficoFormasPago } from "@/components/tablero/grafico-formas-pago";
 import { GraficoVentasDiarias } from "@/components/tablero/grafico-ventas-diarias";
 import { Indicadores } from "@/components/tablero/indicadores";
 import { MasVendidos } from "@/components/tablero/mas-vendidos";
 import { ParaReponer } from "@/components/tablero/para-reponer";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatearDia, formatearMesAnio } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
+import { cn } from "@/lib/utils";
 import { listarProductos } from "@/servicios/productos";
 import { obtenerTablero, type Tablero } from "@/servicios/tablero";
 
 /** Cantidad de productos que se muestran en «Para reponer». */
 const PRODUCTOS_PARA_REPONER = 8;
 
-const ENLACES = [
-  { href: "/ventas/nueva", texto: "Nueva venta" },
-  { href: "/ventas", texto: "Ver facturas" },
-  { href: "/productos?bajoMinimo=true", texto: "Ver productos bajo mínimo" },
-  { href: "/clientes/saldos", texto: "Ver saldos de clientes" },
+const ACCESOS = [
+  { href: "/ventas/nueva", texto: "Nueva venta", icono: ShoppingCartIcon },
+  { href: "/ventas", texto: "Ver facturas", icono: ClipboardListIcon },
+  { href: "/productos?bajoMinimo=true", texto: "Ver productos bajo mínimo", icono: PackageSearchIcon },
+  { href: "/clientes/saldos", texto: "Ver saldos de clientes", icono: WalletIcon },
 ];
 
 export default function PaginaInicio() {
   return (
-    <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-6">
-      <Suspense fallback={<CargandoTablero />}>
+    <PageContainer>
+      <Suspense fallback={<LoadingState variante="ficha" texto="Cargando indicadores…" />}>
         <ContenidoTablero />
       </Suspense>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Seccion titulo="Para reponer" className="lg:col-span-2">
-          <Suspense fallback={<CargandoBloque texto="Cargando productos para reponer…" />}>
+      <Grilla columnas="principal">
+        <Bloque
+          titulo="Para reponer"
+          descripcion="Productos activos con existencia por debajo del mínimo"
+          destacado
+          className="lg:col-span-2"
+        >
+          <Suspense fallback={<LoadingState variante="bloque" texto="Cargando productos para reponer…" />}>
             <BloqueParaReponer />
           </Suspense>
-        </Seccion>
-        <Seccion titulo="Accesos rápidos">
-          <ul className="flex flex-col gap-2 text-sm">
-            {ENLACES.map((e) => (
-              <li key={e.href}>
-                <Link href={e.href} className="underline">
-                  {e.texto}
-                </Link>
-              </li>
+        </Bloque>
+        <Bloque titulo="Accesos rápidos">
+          <Pila as="ul" gap="xs">
+            {ACCESOS.map(({ href, texto, icono: Icono }) => (
+              <Texto as="li" key={href}>
+                <Button asChild variant="ghost" className="w-full justify-start">
+                  <Link href={href}>
+                    <Icono aria-hidden className="text-primary" />
+                    <Texto as="span" className="flex-1 text-left">
+                      {texto}
+                    </Texto>
+                    <ArrowRightIcon aria-hidden className="text-muted-foreground" />
+                  </Link>
+                </Button>
+              </Texto>
             ))}
-          </ul>
-        </Seccion>
-      </div>
-    </div>
+          </Pila>
+        </Bloque>
+      </Grilla>
+    </PageContainer>
   );
 }
 
-function Seccion({ titulo, className = "", children }: { titulo: string; className?: string; children: ReactNode }) {
+/** Tarjeta de un bloque del tablero (gráfico, tabla o lista). */
+function Bloque({
+  titulo,
+  descripcion,
+  destacado = false,
+  className,
+  children,
+}: {
+  titulo: string;
+  descripcion?: string;
+  destacado?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <section className={`flex min-w-0 flex-col gap-3 rounded-lg border border-neutral-300 p-4 dark:border-neutral-700 ${className}`}>
-      <h2 className="font-semibold">{titulo}</h2>
-      {children}
-    </section>
+    <Card className={cn("min-w-0 shadow-suave", destacado && "border-t-4 border-t-warning", className)}>
+      <CardHeader>
+        <CardTitle>
+          <Titulo nivel={2}>{titulo}</Titulo>
+        </CardTitle>
+        {descripcion && <CardDescription>{descripcion}</CardDescription>}
+      </CardHeader>
+      <CardContent className="min-w-0">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -81,8 +115,8 @@ async function ContenidoTablero() {
     console.error("Tablero: no se pudieron obtener los indicadores.", error);
     return (
       <>
-        <h1 className="text-2xl font-semibold">Inicio</h1>
-        <EstadoError titulo="No se pudieron cargar los indicadores" mensaje="Ocurrió un error al consultar los datos del tablero. Intente nuevamente." />
+        <PageHeader titulo="Inicio" />
+        <ErrorState titulo="No se pudieron cargar los indicadores" mensaje="Ocurrió un error al consultar los datos del tablero. Intente nuevamente." />
       </>
     );
   }
@@ -91,27 +125,33 @@ async function ContenidoTablero() {
   const hoy = tablero.ventasDiarias.at(-1)!.fecha;
   return (
     <>
-      <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">Inicio</h1>
-        <p className="text-sm opacity-80">
-          Hoy, {formatearDia(hoy)} · Período del mes: {formatearMesAnio(hoy)}
-        </p>
-      </header>
+      <PageHeader
+        titulo="Inicio"
+        descripcion={`Hoy, ${formatearDia(hoy)} · Período del mes: ${formatearMesAnio(hoy)}`}
+        acciones={
+          <Button asChild>
+            <Link href="/ventas/nueva">
+              <ShoppingCartIcon aria-hidden />
+              Nueva venta
+            </Link>
+          </Button>
+        }
+      />
 
       <Indicadores hoy={tablero.hoy} mes={tablero.mes} cuentasCorrientes={tablero.cuentasCorrientes} bajoMinimo={tablero.bajoMinimo} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Seccion titulo="Ventas diarias · últimos 30 días" className="lg:col-span-2">
+      <Grilla columnas="principal">
+        <Bloque titulo="Ventas diarias" descripcion="Últimos 30 días, solo facturas emitidas" className="lg:col-span-2">
           <GraficoVentasDiarias ventas={tablero.ventasDiarias} />
-        </Seccion>
-        <Seccion titulo={`Ventas por forma de pago · ${formatearMesAnio(hoy)}`}>
+        </Bloque>
+        <Bloque titulo="Ventas por forma de pago" descripcion={`Mes de ${formatearMesAnio(hoy)}`}>
           <GraficoFormasPago formas={tablero.porFormaDePago} />
-        </Seccion>
-      </div>
+        </Bloque>
+      </Grilla>
 
-      <Seccion titulo={`Productos más vendidos · ${formatearMesAnio(hoy)}`}>
+      <Bloque titulo="Productos más vendidos" descripcion={`Top 5 por unidades · ${formatearMesAnio(hoy)}`}>
         <MasVendidos productos={tablero.masVendidos} />
-      </Seccion>
+      </Bloque>
     </>
   );
 }
@@ -124,7 +164,7 @@ async function BloqueParaReponer() {
     lista = await listarProductos(usuario, { bajoMinimo: "true", pageSize: String(PRODUCTOS_PARA_REPONER) });
   } catch (error) {
     console.error("Tablero: no se pudieron obtener los productos para reponer.", error);
-    return <EstadoError titulo="No se pudieron cargar los productos para reponer" mensaje="Intente nuevamente." />;
+    return <ErrorState titulo="No se pudieron cargar los productos para reponer" mensaje="Intente nuevamente." />;
   }
   return <ParaReponer productos={lista.data} total={lista.total} />;
 }

@@ -1,26 +1,183 @@
+/*
+ * Identidad visual del sistema (decisión D9: propia, sin copiar las pantallas
+ * de referencia). TODOS los colores, radios y sombras se definen aquí como
+ * variables CSS y se exponen a Tailwind con @theme: los componentes usan
+ * clases (bg-primary, text-success-strong, ...) y nunca colores sueltos.
+ *
+ * Paleta: índigo profundo como primario, neutros fríos de fondo, verde para
+ * éxito, ámbar para advertencias y rojo para errores y acciones destructivas.
+ * El panel lateral es azul noche para separar la navegación del contenido.
+ */
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-strong: var(--success-strong);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-strong: var(--warning-strong);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-suave: 0 1px 2px 0 oklch(0.25 0.03 268 / 0.06), 0 1px 3px 0 oklch(0.25 0.03 268 / 0.05);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Superficies y texto */
+  --background: oklch(0.982 0.004 268);
+  --foreground: oklch(0.22 0.025 268);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.025 268);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.025 268);
+
+  /* Primario: índigo profundo. Secundario: gris índigo discreto. */
+  --primary: oklch(0.46 0.16 268);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.014 268);
+  --secondary-foreground: oklch(0.33 0.06 268);
+  --muted: oklch(0.962 0.006 268);
+  --muted-foreground: oklch(0.47 0.022 268);
+  --accent: oklch(0.948 0.026 268);
+  --accent-foreground: oklch(0.36 0.13 268);
+
+  /* Estados */
+  --destructive: oklch(0.54 0.2 27);
+  --success: oklch(0.55 0.13 152);
+  --success-soft: oklch(0.955 0.04 152);
+  --success-strong: oklch(0.4 0.1 152);
+  --warning: oklch(0.76 0.15 75);
+  --warning-soft: oklch(0.965 0.05 85);
+  --warning-strong: oklch(0.44 0.1 60);
+
+  /* Bordes y foco */
+  --border: oklch(0.91 0.008 268);
+  --input: oklch(0.86 0.012 268);
+  --ring: oklch(0.55 0.16 268);
+  --radius: 0.5rem;
+
+  /* Gráficos (coinciden con src/components/tablero/opciones-graficos.ts) */
+  --chart-1: oklch(0.46 0.16 268);
+  --chart-2: oklch(0.76 0.15 75);
+  --chart-3: oklch(0.55 0.13 152);
+  --chart-4: oklch(0.62 0.1 268);
+  --chart-5: oklch(0.7 0.05 268);
+
+  /* Panel lateral (azul noche) */
+  --sidebar: oklch(0.235 0.045 268);
+  --sidebar-foreground: oklch(0.96 0.008 268);
+  --sidebar-muted: oklch(0.78 0.03 268);
+  --sidebar-primary: oklch(0.78 0.11 268);
+  --sidebar-primary-foreground: oklch(0.2 0.04 268);
+  --sidebar-accent: oklch(0.31 0.06 268);
+  --sidebar-accent-foreground: oklch(0.99 0 0);
+  --sidebar-border: oklch(0.32 0.04 268);
+  --sidebar-ring: oklch(0.78 0.11 268);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  /* Foco visible y consistente para todo lo que se opera con teclado. */
+  a:focus-visible,
+  [role="option"]:focus-visible,
+  summary:focus-visible {
+    @apply rounded-sm outline-2 outline-offset-2 outline-ring;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Avisos: un filete de color además del ícono, para no depender solo del color del texto. */
+.cn-toast.aviso-exito {
+  border-left: 4px solid var(--success);
+}
+.cn-toast.aviso-error {
+  border-left: 4px solid var(--destructive);
+}
+.cn-toast.aviso-advertencia {
+  border-left: 4px solid var(--warning);
+}
+.cn-toast.aviso-info {
+  border-left: 4px solid var(--primary);
+}
+
+/* Accesibilidad: sin animaciones para quien pidió reducir el movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Impresión: solo el documento, en blanco y negro legible y sin sombras. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  [data-slot="card"] {
+    box-shadow: none !important;
+  }
 }

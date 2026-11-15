@@ -2,6 +2,9 @@
  * Mensaje de los estados de una búsqueda que no muestran resultados:
  * inicial, cargando, sin resultados y error (con reintento).
  */
+import { LoaderCircleIcon, RefreshCwIcon, SearchXIcon, TriangleAlertIcon } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import type { EstadoBusqueda } from "@/lib/borrador-venta";
 
 type Props<T> = {
@@ -14,27 +17,31 @@ type Props<T> = {
 export function MensajeBusqueda<T>({ estado, inicial, vacio, onReintentar }: Props<T>) {
   switch (estado.tipo) {
     case "inicial":
-      return <p className="text-xs text-gray-600">{inicial}</p>;
+      return <p className="text-xs text-muted-foreground">{inicial}</p>;
     case "cargando":
       return (
-        <p role="status" className="text-xs text-gray-600">
+        <p role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LoaderCircleIcon aria-hidden className="size-3.5 animate-spin" />
           Buscando…
         </p>
       );
     case "vacio":
       return (
-        <p role="status" className="text-xs">
+        <p role="status" className="flex items-center gap-1.5 text-xs text-foreground">
+          <SearchXIcon aria-hidden className="size-3.5 text-muted-foreground" />
           {vacio}
         </p>
       );
     case "error":
       return (
-        <p role="alert" className="flex flex-wrap items-center gap-2 text-xs text-red-700">
-          No fue posible realizar la búsqueda: {estado.mensaje}
-          <button type="button" onClick={onReintentar} className="rounded border px-2 py-0.5">
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+          <TriangleAlertIcon aria-hidden className="size-3.5" />
+          <span>No fue posible realizar la búsqueda: {estado.mensaje}</span>
+          <Button type="button" variant="outline" size="xs" onClick={onReintentar}>
+            <RefreshCwIcon aria-hidden />
             Reintentar
-          </button>
-        </p>
+          </Button>
+        </div>
       );
     case "resultados":
       return null;

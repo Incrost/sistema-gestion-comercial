@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * Botón «Cerrar sesión» (RF-U1). Llama a POST /api/auth/logout, que borra la
- * cookie httpOnly (el navegador no puede borrarla por su cuenta), y vuelve al login.
+ * Cierre de sesión (RF-U1). Llama a POST /api/auth/logout, que borra la
+ * cookie httpOnly (el navegador no puede borrarla por su cuenta), y vuelve al
+ * login. El hook lo usa el menú de usuario de la barra superior.
  */
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function BotonCerrarSesion() {
+export function useCerrarSesion() {
   const router = useRouter();
-  const [enviando, setEnviando] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
 
   async function cerrarSesion() {
-    setEnviando(true);
+    setCerrando(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
@@ -21,14 +22,5 @@ export function BotonCerrarSesion() {
     }
   }
 
-  return (
-    <button
-      type="button"
-      onClick={cerrarSesion}
-      disabled={enviando}
-      className="rounded border px-3 py-1 disabled:opacity-50"
-    >
-      {enviando ? "Cerrando…" : "Cerrar sesión"}
-    </button>
-  );
+  return { cerrando, cerrarSesion };
 }

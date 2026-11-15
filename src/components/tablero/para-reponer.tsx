@@ -3,47 +3,58 @@
  * Los datos vienen de listarProductos() con el filtro `bajoMinimo` (la regla
  * existencia < stockMinimo vive solo en src/servicios/productos.ts).
  */
+import { PackageCheckIcon } from "lucide-react";
 import Link from "next/link";
 
+import { ResponsiveTable } from "@/components/datos/responsive-table";
+import { EmptyState } from "@/components/estados/empty-state";
+import { Button } from "@/components/ui/button";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ProductoPublico } from "@/servicios/productos";
 
 export function ParaReponer({ productos, total }: { productos: ProductoPublico[]; total: number }) {
   if (productos.length === 0) {
-    return <p className="text-sm opacity-70">No hay productos activos bajo el stock mínimo.</p>;
+    return <EmptyState compacto icono={PackageCheckIcon} titulo="No hay productos activos bajo el stock mínimo." />;
   }
   return (
-    <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-neutral-300 dark:border-neutral-700">
-              <th scope="col" className="hidden py-2 pr-2 sm:table-cell">Código</th>
-              <th scope="col" className="py-2 pr-2">Descripción</th>
-              <th scope="col" className="py-2 pr-2 text-right"><abbr title="Existencia" className="no-underline sm:hidden">Exist.</abbr><span className="hidden sm:inline">Existencia</span></th>
-              <th scope="col" className="py-2 text-right"><abbr title="Mínimo" className="no-underline sm:hidden">Mín.</abbr><span className="hidden sm:inline">Mínimo</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {productos.map((p) => (
-              <tr key={p.id} className="border-b border-neutral-200 dark:border-neutral-800">
-                <td className="hidden py-2 pr-2 font-mono whitespace-nowrap sm:table-cell">{p.codigo}</td>
-                <td className="py-2 pr-2">
-                  <Link href={`/productos/${p.id}`} className="underline">
-                    {p.descripcion}
-                  </Link>
-                  <span className="block font-mono text-xs opacity-70 sm:hidden">{p.codigo}</span>
-                </td>
-                <td className="py-2 pr-2 text-right tabular-nums text-red-700 dark:text-red-400">{p.existencia}</td>
-                <td className="py-2 text-right tabular-nums">{p.stockMinimo}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex flex-col gap-3">
+      <ResponsiveTable etiqueta="Productos para reponer" className="shadow-none">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead scope="col" className="hidden sm:table-cell">Código</TableHead>
+            <TableHead scope="col">Descripción</TableHead>
+            <TableHead scope="col" className="text-right">
+              <abbr title="Existencia" className="no-underline sm:hidden">Exist.</abbr>
+              <span className="hidden sm:inline">Existencia</span>
+            </TableHead>
+            <TableHead scope="col" className="text-right">
+              <abbr title="Mínimo" className="no-underline sm:hidden">Mín.</abbr>
+              <span className="hidden sm:inline">Mínimo</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {productos.map((p) => (
+            <TableRow key={p.id}>
+              <TableCell className="hidden font-mono text-xs sm:table-cell">{p.codigo}</TableCell>
+              <TableCell className="whitespace-normal">
+                <Link href={`/productos/${p.id}`} className="font-medium hover:text-primary hover:underline">
+                  {p.descripcion}
+                </Link>
+                <span className="block font-mono text-xs text-muted-foreground sm:hidden">{p.codigo}</span>
+              </TableCell>
+              <TableCell className="text-right font-semibold text-warning-strong tabular-nums">
+                <span>{p.existencia}</span>
+              </TableCell>
+              <TableCell className="text-right tabular-nums">{p.stockMinimo}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </ResponsiveTable>
       {total > productos.length && (
-        <Link href="/productos?bajoMinimo=true" className="text-sm underline">
-          Ver los {total} productos bajo el mínimo
-        </Link>
+        <Button asChild variant="link" className="h-auto w-fit p-0">
+          <Link href="/productos?bajoMinimo=true">Ver los {total} productos bajo el mínimo</Link>
+        </Button>
       )}
     </div>
   );

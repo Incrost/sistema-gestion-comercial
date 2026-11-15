@@ -21,7 +21,7 @@ import {
 
 export function GraficoVentasDiarias({ ventas }: { ventas: VentaDiaria[] }) {
   if (todosEnCero(ventas)) {
-    return <p className="py-10 text-center text-sm opacity-70">No se registraron ventas en los últimos 30 días.</p>;
+    return <p className="py-10 text-center text-sm text-muted-foreground">No se registraron ventas en los últimos 30 días.</p>;
   }
 
   const opciones: ChartOptions<"bar"> = {

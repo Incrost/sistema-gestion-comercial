@@ -5,21 +5,35 @@
  * los parámetros y verifica el rol. Búsqueda, estado y página viven en la
  * URL. El filtro de estado (activos, inactivos, todos) es solo para el
  * administrador; el vendedor ve únicamente clientes activos.
- *
- * PROVISORIO: interfaz mínima para verificar el módulo. El diseño definitivo
- * (panel lateral, shadcn/ui) llega en una etapa posterior.
  */
-import Form from "next/form";
+import { UsersIcon, WalletIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { Pagination } from "@/components/datos/pagination";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { EmptyState } from "@/components/estados/empty-state";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { FilterBar } from "@/components/formularios/filter-bar";
+import { FormField } from "@/components/formularios/form-field";
+import { SearchInput } from "@/components/formularios/search-input";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Texto } from "@/components/layout/primitivas";
+import { Button } from "@/components/ui/button";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { normalizarError } from "@/lib/api-error";
-import { formatearMoneda } from "@/lib/formatos";
+import { formatearDocumento, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
-import { listarClientes } from "@/servicios/clientes";
+import { listarClientes, type ClientePublico } from "@/servicios/clientes";
 import { tieneRol } from "@/servicios/permisos";
 
-import { FormularioCliente } from "./formulario-cliente";
+import { DialogoCliente } from "./formulario-cliente";
+
+export const metadata: Metadata = { title: "Clientes" };
 
 type ParametrosBusqueda = Promise<Record<string, string | string[] | undefined>>;
 
@@ -27,9 +41,11 @@ const TAMANIO_PAGINA = 10;
 
 export default function PaginaClientes({ searchParams }: { searchParams: ParametrosBusqueda }) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando clientes…</p>}>
-      <Listado searchParams={searchParams} />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState texto="Cargando clientes…" />}>
+        <Listado searchParams={searchParams} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -37,6 +53,39 @@ export default function PaginaClientes({ searchParams }: { searchParams: Paramet
 function primero(valor: string | string[] | undefined): string | undefined {
   return Array.isArray(valor) ? valor[0] : valor;
 }
+
+const COLUMNAS: Columna<ClientePublico>[] = [
+  {
+    id: "nombre",
+    encabezado: "Nombre",
+    principal: true,
+    className: "whitespace-normal min-w-44",
+    celda: (c) => (
+      <Link href={`/clientes/${c.id}`} className="font-medium text-primary hover:underline">
+        {c.nombre}
+      </Link>
+    ),
+  },
+  { id: "documento", encabezado: "Documento", celda: (c) => `${c.tipoDoc} ${formatearDocumento(c.tipoDoc, c.nroDoc)}` },
+  { id: "telefono", encabezado: "Teléfono", ocultarEnMovil: true, celda: (c) => c.telefono ?? "—" },
+  {
+    id: "cuenta",
+    encabezado: "Cuenta corriente",
+    celda: (c) => <StatusBadge estado={c.cuentaCorriente ? "cuenta-corriente" : "sin-cuenta"} texto={c.cuentaCorriente ? "Habilitada" : "No"} />,
+  },
+  {
+    id: "saldo",
+    encabezado: "Saldo",
+    alinear: "derecha",
+    celda: (c) => (
+      <Texto as="span" numerico tono={c.saldo > 0 ? "advertencia" : "normal"} peso={c.saldo > 0 ? "fuerte" : "normal"}>
+        {formatearMoneda(c.saldo)}
+      </Texto>
+    ),
+  },
+  { id: "disponible", encabezado: "Disponible", alinear: "derecha", celda: (c) => (c.disponible === null ? "Sin límite" : formatearMoneda(c.disponible)) },
+  { id: "estado", encabezado: "Estado", celda: (c) => <StatusBadge estado={c.activo ? "activo" : "inactivo"} /> },
+];
 
 async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
   const usuario = await exigirUsuarioDePagina(); // RF-U2
@@ -48,21 +97,29 @@ async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
     activo: esAdmin ? (primero(parametros.activo) ?? "true") : "true",
     page: primero(parametros.page) ?? "1",
   };
+  const hayFiltros = Boolean(filtros.q || filtros.activo !== "true");
+
+  const acciones = (
+    <>
+      <Button asChild variant="outline">
+        <Link href="/clientes/saldos">
+          <WalletIcon aria-hidden />
+          Saldos
+        </Link>
+      </Button>
+      <DialogoCliente />
+    </>
+  );
 
   let lista;
   try {
     lista = await listarClientes(usuario, { ...filtros, pageSize: String(TAMANIO_PAGINA) });
   } catch (error) {
     return (
-      <section className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Clientes</h1>
-        <p role="alert" className="text-red-700">
-          {normalizarError(error).message}
-        </p>
-        <Link href="/clientes" className="underline">
-          Volver al listado
-        </Link>
-      </section>
+      <>
+        <PageHeader titulo="Clientes" acciones={acciones} />
+        <ErrorState titulo="No se pudieron cargar los clientes" mensaje={normalizarError(error).message} volver={{ href: "/clientes", texto: "Volver al listado" }} />
+      </>
     );
   }
 
@@ -77,85 +134,40 @@ async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-semibold">Clientes</h1>
-        <Link href="/clientes/saldos" className="text-sm underline">
-          Saldos
-        </Link>
-      </div>
+    <>
+      <PageHeader titulo="Clientes" descripcion="Datos de contacto, cuenta corriente y crédito disponible." acciones={acciones} />
 
-      <Form action="/clientes" className="flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          Buscar por nombre o documento
-          <input name="q" defaultValue={filtros.q} className="rounded border px-2 py-1" />
-        </label>
+      <FilterBar action="/clientes" hayFiltros={hayFiltros} textoEnviar="Buscar" etiqueta="Búsqueda de clientes">
+        <FormField id="filtro-q" etiqueta="Buscar por nombre o documento" className="sm:col-span-2">
+          <SearchInput id="filtro-q" name="q" defaultValue={filtros.q} placeholder="Ej.: López o 28456123" />
+        </FormField>
         {esAdmin && (
-          <label className="flex flex-col gap-1">
-            Estado
-            <select name="activo" defaultValue={filtros.activo} className="rounded border px-2 py-1">
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-              <option value="todos">Todos</option>
-            </select>
-          </label>
+          <FormField id="filtro-activo" etiqueta="Estado">
+            <NativeSelect id="filtro-activo" name="activo" defaultValue={filtros.activo} className="w-full">
+              <NativeSelectOption value="true">Activos</NativeSelectOption>
+              <NativeSelectOption value="false">Inactivos</NativeSelectOption>
+              <NativeSelectOption value="todos">Todos</NativeSelectOption>
+            </NativeSelect>
+          </FormField>
         )}
-        <button type="submit" className="rounded border px-3 py-1">
-          Buscar
-        </button>
-        <Link href="/clientes" className="underline">
-          Limpiar
-        </Link>
-      </Form>
+      </FilterBar>
 
-      {lista.data.length === 0 ? (
-        <p className="text-sm">No hay clientes que coincidan con la búsqueda.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 pr-3">Nombre</th>
-                <th className="py-2 pr-3">Documento</th>
-                <th className="py-2 pr-3">Teléfono</th>
-                <th className="py-2 pr-3">Cuenta corriente</th>
-                <th className="py-2 pr-3 text-right">Saldo</th>
-                <th className="py-2 pr-3 text-right">Disponible</th>
-                <th className="py-2 pr-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.data.map((c) => (
-                <tr key={c.id} className="border-b">
-                  <td className="py-2 pr-3">
-                    <Link href={`/clientes/${c.id}`} className="underline">
-                      {c.nombre}
-                    </Link>
-                  </td>
-                  <td className="py-2 pr-3 font-mono">
-                    {c.tipoDoc} {c.nroDoc}
-                  </td>
-                  <td className="py-2 pr-3">{c.telefono ?? "—"}</td>
-                  <td className="py-2 pr-3">{c.cuentaCorriente ? "Sí" : "No"}</td>
-                  <td className="py-2 pr-3 text-right">{formatearMoneda(c.saldo)}</td>
-                  <td className="py-2 pr-3 text-right">{c.disponible === null ? "Sin límite" : formatearMoneda(c.disponible)}</td>
-                  <td className="py-2 pr-3">{!c.activo && <span className="rounded bg-gray-200 px-2 py-0.5">Inactivo</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        etiqueta="Clientes"
+        columnas={COLUMNAS}
+        filas={lista.data}
+        clave={(c) => c.id}
+        claseFila={(c) => (!c.activo ? "text-muted-foreground" : undefined)}
+        vacio={
+          <EmptyState
+            icono={UsersIcon}
+            titulo="No hay clientes que coincidan con la búsqueda."
+            descripcion={hayFiltros ? "Pruebe con otro nombre o documento." : "Use «Nuevo cliente» para cargar el primero."}
+          />
+        }
+      />
 
-      <nav className="flex items-center gap-3 text-sm" aria-label="Paginación">
-        {lista.page > 1 ? <Link href={enlacePagina(lista.page - 1)} className="underline">Anterior</Link> : <span className="opacity-50">Anterior</span>}
-        <span>
-          Página {lista.page} de {totalPaginas} · {lista.total} cliente(s)
-        </span>
-        {lista.page < totalPaginas ? <Link href={enlacePagina(lista.page + 1)} className="underline">Siguiente</Link> : <span className="opacity-50">Siguiente</span>}
-      </nav>
-
-      <FormularioCliente />
-    </section>
+      <Pagination pagina={lista.page} totalPaginas={totalPaginas} total={lista.total} unidad={["cliente", "clientes"]} enlace={enlacePagina} />
+    </>
   );
 }

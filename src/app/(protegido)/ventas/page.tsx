@@ -7,14 +7,28 @@
  * URL, así el listado se puede recargar y compartir. Muestra `totalEmitido`
  * (suma de las emitidas del filtro). El botón «Anular» solo aparece para el
  * administrador y con la factura emitida.
- *
- * PROVISORIO: interfaz mínima para verificar el módulo. El diseño definitivo
- * (panel lateral, shadcn/ui) llega en una etapa posterior.
  */
-import Form from "next/form";
+import { FileSearchIcon, ShoppingCartIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { Pagination } from "@/components/datos/pagination";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { EmptyState } from "@/components/estados/empty-state";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { FilterBar } from "@/components/formularios/filter-bar";
+import { FormField } from "@/components/formularios/form-field";
+import { SearchInput } from "@/components/formularios/search-input";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Fila, Texto } from "@/components/layout/primitivas";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { normalizarError } from "@/lib/api-error";
 import { formatearFechaHora, formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
@@ -25,10 +39,12 @@ import {
   FORMAS_PAGO,
   NOMBRE_CONSUMIDOR_FINAL,
 } from "@/lib/validacion-facturas";
-import { listarFacturas, opcionesFiltroFacturas } from "@/servicios/facturas";
+import { listarFacturas, opcionesFiltroFacturas, type FacturaResumenPublica } from "@/servicios/facturas";
 import { tieneRol } from "@/servicios/permisos";
 
 import { AccionAnular } from "./accion-anular";
+
+export const metadata: Metadata = { title: "Facturas" };
 
 type ParametrosBusqueda = Promise<Record<string, string | string[] | undefined>>;
 
@@ -39,9 +55,11 @@ const FILTROS = ["q", "desde", "hasta", "clienteId", "vendedorId", "forma", "est
 
 export default function PaginaVentas({ searchParams }: { searchParams: ParametrosBusqueda }) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando facturas…</p>}>
-      <Listado searchParams={searchParams} />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState texto="Cargando facturas…" />}>
+        <Listado searchParams={searchParams} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -49,6 +67,15 @@ export default function PaginaVentas({ searchParams }: { searchParams: Parametro
 function primero(valor: string | string[] | undefined): string {
   return (Array.isArray(valor) ? valor[0] : valor) ?? "";
 }
+
+const ACCION_NUEVA = (
+  <Button asChild>
+    <Link href="/ventas/nueva">
+      <ShoppingCartIcon aria-hidden />
+      Nueva venta
+    </Link>
+  </Button>
+);
 
 async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
   const usuario = await exigirUsuarioDePagina(); // RF-U2
@@ -60,6 +87,7 @@ async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
     string
   >;
   const page = primero(parametros.page) || "1";
+  const hayFiltros = FILTROS.some((f) => filtros[f] !== "");
 
   let lista;
   let opciones;
@@ -70,15 +98,10 @@ async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
     ]);
   } catch (error) {
     return (
-      <section className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Facturas</h1>
-        <p role="alert" className="text-red-700">
-          {normalizarError(error).message}
-        </p>
-        <Link href="/ventas" className="underline">
-          Volver al listado
-        </Link>
-      </section>
+      <>
+        <PageHeader titulo="Facturas" acciones={ACCION_NUEVA} />
+        <ErrorState titulo="No se pudieron cargar las facturas" mensaje={normalizarError(error).message} volver={{ href: "/ventas", texto: "Volver al listado" }} />
+      </>
     );
   }
 
@@ -91,142 +114,123 @@ async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
     return texto ? `/ventas?${texto}` : "/ventas";
   };
 
+  const columnas: Columna<FacturaResumenPublica>[] = [
+    {
+      id: "numero",
+      encabezado: "Número",
+      principal: true,
+      celda: (f) => (
+        <Link href={`/ventas/${f.id}`} className="font-mono font-medium text-primary hover:underline">
+          {f.numeroFormateado}
+        </Link>
+      ),
+    },
+    { id: "fecha", encabezado: "Fecha y hora", celda: (f) => formatearFechaHora(f.fecha) },
+    { id: "comprador", encabezado: "Comprador", className: "max-w-56 truncate", celda: (f) => f.cliente?.nombre ?? NOMBRE_CONSUMIDOR_FINAL },
+    { id: "vendedor", encabezado: "Vendedor", celda: (f) => f.vendedor.nombre },
+    { id: "forma", encabezado: "Forma de pago", celda: (f) => ETIQUETAS_FORMA_PAGO[f.formaPago] },
+    {
+      id: "total",
+      encabezado: "Total",
+      alinear: "derecha",
+      celda: (f) => (
+        <Texto as="span" numerico peso={f.estado === "anulada" ? "normal" : "medio"} className={f.estado === "anulada" ? "text-muted-foreground line-through" : undefined}>
+          {formatearMoneda(f.total)}
+        </Texto>
+      ),
+    },
+    { id: "estado", encabezado: "Estado", celda: (f) => <StatusBadge estado={f.estado} /> },
+  ];
+
   return (
-    <section className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Facturas</h1>
-        <Link href="/ventas/nueva" className="rounded border px-3 py-1 text-sm">
-          Nueva venta
-        </Link>
-      </div>
+    <>
+      <PageHeader titulo="Facturas" descripcion="Consulta de facturas emitidas y anuladas." acciones={ACCION_NUEVA} />
 
-      <Form action="/ventas" className="flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          Número o comprador
-          <input name="q" defaultValue={filtros.q} placeholder="0001-00000001 o nombre" className="rounded border px-2 py-1" />
-        </label>
-        <label className="flex flex-col gap-1">
-          Desde
-          <input type="date" name="desde" defaultValue={filtros.desde} className="rounded border px-2 py-1" />
-        </label>
-        <label className="flex flex-col gap-1">
-          Hasta
-          <input type="date" name="hasta" defaultValue={filtros.hasta} className="rounded border px-2 py-1" />
-        </label>
-        <label className="flex flex-col gap-1">
-          Cliente
-          <select name="clienteId" defaultValue={filtros.clienteId} className="rounded border px-2 py-1">
-            <option value="">Todos</option>
+      <FilterBar action="/ventas" hayFiltros={hayFiltros} etiqueta="Filtros de facturas">
+        <FormField id="filtro-q" etiqueta="Número o comprador" className="sm:col-span-2">
+          <SearchInput id="filtro-q" name="q" defaultValue={filtros.q} placeholder="0001-00000001 o nombre" />
+        </FormField>
+        <FormField id="filtro-desde" etiqueta="Desde">
+          <Input id="filtro-desde" type="date" name="desde" defaultValue={filtros.desde} />
+        </FormField>
+        <FormField id="filtro-hasta" etiqueta="Hasta">
+          <Input id="filtro-hasta" type="date" name="hasta" defaultValue={filtros.hasta} />
+        </FormField>
+        <FormField id="filtro-cliente" etiqueta="Cliente">
+          <NativeSelect id="filtro-cliente" name="clienteId" defaultValue={filtros.clienteId} className="w-full">
+            <NativeSelectOption value="">Todos</NativeSelectOption>
             {opciones.clientes.map((c) => (
-              <option key={c.id} value={c.id}>
+              <NativeSelectOption key={c.id} value={c.id}>
                 {c.nombre}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          Vendedor
-          <select name="vendedorId" defaultValue={filtros.vendedorId} className="rounded border px-2 py-1">
-            <option value="">Todos</option>
+          </NativeSelect>
+        </FormField>
+        <FormField id="filtro-vendedor" etiqueta="Vendedor">
+          <NativeSelect id="filtro-vendedor" name="vendedorId" defaultValue={filtros.vendedorId} className="w-full">
+            <NativeSelectOption value="">Todos</NativeSelectOption>
             {opciones.vendedores.map((v) => (
-              <option key={v.id} value={v.id}>
+              <NativeSelectOption key={v.id} value={v.id}>
                 {v.nombre}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          Forma de pago
-          <select name="forma" defaultValue={filtros.forma} className="rounded border px-2 py-1">
-            <option value="">Todas</option>
+          </NativeSelect>
+        </FormField>
+        <FormField id="filtro-forma" etiqueta="Forma de pago">
+          <NativeSelect id="filtro-forma" name="forma" defaultValue={filtros.forma} className="w-full">
+            <NativeSelectOption value="">Todas</NativeSelectOption>
             {FORMAS_PAGO.map((f) => (
-              <option key={f} value={f}>
+              <NativeSelectOption key={f} value={f}>
                 {ETIQUETAS_FORMA_PAGO[f]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          Estado
-          <select name="estado" defaultValue={filtros.estado} className="rounded border px-2 py-1">
-            <option value="">Todos</option>
+          </NativeSelect>
+        </FormField>
+        <FormField id="filtro-estado" etiqueta="Estado">
+          <NativeSelect id="filtro-estado" name="estado" defaultValue={filtros.estado} className="w-full">
+            <NativeSelectOption value="">Todos</NativeSelectOption>
             {ESTADOS_FACTURA.map((e) => (
-              <option key={e} value={e}>
+              <NativeSelectOption key={e} value={e}>
                 {ETIQUETAS_ESTADO_FACTURA[e]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <button type="submit" className="rounded border px-3 py-1">
-          Filtrar
-        </button>
-        <Link href="/ventas" className="underline">
-          Limpiar
-        </Link>
-      </Form>
+          </NativeSelect>
+        </FormField>
+      </FilterBar>
 
-      <p className="text-sm">
-        Total emitido (sin anuladas) según el filtro: <strong>{formatearMoneda(lista.totalEmitido)}</strong>
-      </p>
+      <Card className="flex-row flex-wrap items-center justify-between gap-2 border-l-4 border-l-primary px-4 shadow-suave">
+        <Texto tono="suave">Total emitido (sin anuladas) según el filtro</Texto>
+        <Fila gap="sm" alinear="baseline">
+          <Texto tamanio="lg" peso="fuerte" numerico className="text-2xl">
+            {formatearMoneda(lista.totalEmitido)}
+          </Texto>
+          <Texto as="span" tono="suave" tamanio="xs">
+            {lista.total} {lista.total === 1 ? "factura" : "facturas"}
+          </Texto>
+        </Fila>
+      </Card>
 
-      {lista.data.length === 0 ? (
-        <p className="text-sm">No hay facturas que coincidan con la búsqueda.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 pr-3">Número</th>
-                <th className="py-2 pr-3">Fecha y hora</th>
-                <th className="py-2 pr-3">Comprador</th>
-                <th className="py-2 pr-3">Vendedor</th>
-                <th className="py-2 pr-3">Forma de pago</th>
-                <th className="py-2 pr-3 text-right">Total</th>
-                <th className="py-2 pr-3">Estado</th>
-                {esAdmin && <th className="py-2 pr-3">Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {lista.data.map((f) => (
-                <tr key={f.id} className="border-b align-top">
-                  <td className="py-2 pr-3 font-mono">
-                    <Link href={`/ventas/${f.id}`} className="underline">
-                      {f.numeroFormateado}
-                    </Link>
-                  </td>
-                  <td className="py-2 pr-3">{formatearFechaHora(f.fecha)}</td>
-                  <td className="py-2 pr-3">{f.cliente?.nombre ?? NOMBRE_CONSUMIDOR_FINAL}</td>
-                  <td className="py-2 pr-3">{f.vendedor.nombre}</td>
-                  <td className="py-2 pr-3">{ETIQUETAS_FORMA_PAGO[f.formaPago]}</td>
-                  <td className={`py-2 pr-3 text-right ${f.estado === "anulada" ? "line-through" : ""}`}>
-                    {formatearMoneda(f.total)}
-                  </td>
-                  <td className="py-2 pr-3">
-                    {f.estado === "anulada" ? (
-                      <span className="rounded bg-red-100 px-2 py-0.5 text-red-800">Anulada</span>
-                    ) : (
-                      ETIQUETAS_ESTADO_FACTURA[f.estado]
-                    )}
-                  </td>
-                  {esAdmin && (
-                    <td className="py-2 pr-3">
-                      {f.estado === "emitida" && <AccionAnular facturaId={f.id} numeroFormateado={f.numeroFormateado} />}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        etiqueta="Facturas"
+        columnas={columnas}
+        filas={lista.data}
+        clave={(f) => f.id}
+        claseFila={(f) => (f.estado === "anulada" ? "bg-destructive/[0.03]" : undefined)}
+        acciones={
+          esAdmin
+            ? (f) => (f.estado === "emitida" ? <AccionAnular facturaId={f.id} numeroFormateado={f.numeroFormateado} compacto /> : null)
+            : undefined
+        }
+        vacio={
+          <EmptyState
+            icono={FileSearchIcon}
+            titulo="No hay facturas que coincidan con la búsqueda."
+            descripcion={hayFiltros ? "Pruebe con otros filtros o límpielos para ver todas las facturas." : "Las ventas confirmadas aparecerán aquí."}
+          />
+        }
+      />
 
-      <nav className="flex items-center gap-3 text-sm" aria-label="Paginación">
-        {lista.page > 1 ? <Link href={enlacePagina(lista.page - 1)} className="underline">Anterior</Link> : <span className="opacity-50">Anterior</span>}
-        <span>
-          Página {lista.page} de {totalPaginas} · {lista.total} factura(s)
-        </span>
-        {lista.page < totalPaginas ? <Link href={enlacePagina(lista.page + 1)} className="underline">Siguiente</Link> : <span className="opacity-50">Siguiente</span>}
-      </nav>
-    </section>
+      <Pagination pagina={lista.page} totalPaginas={totalPaginas} total={lista.total} unidad={["factura", "facturas"]} enlace={enlacePagina} />
+    </>
   );
 }

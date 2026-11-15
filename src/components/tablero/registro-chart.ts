@@ -11,3 +11,8 @@ import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, Linear
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
 
 export { ChartJS };
+
+// Estilo común de los gráficos, acorde a la identidad visual (src/app/globals.css).
+ChartJS.defaults.color = "#5b6075";
+ChartJS.defaults.borderColor = "#e3e5ee";
+ChartJS.defaults.font.family = "Geist, ui-sans-serif, system-ui, sans-serif";

@@ -12,14 +12,18 @@ import { formatearDia, formatearDiaCorto, formatearMoneda } from "@/lib/formatos
 import { ETIQUETAS_FORMA_PAGO } from "@/lib/validacion-facturas";
 import type { VentaDiaria, VentaPorForma } from "@/servicios/tablero"; // solo los tipos
 
-/** Colores diferenciables (también en escala de grises) por forma de pago. */
+/**
+ * Colores diferenciables (también en escala de grises) por forma de pago.
+ * Son los mismos de la identidad visual (--chart-1 a --chart-3 en
+ * src/app/globals.css); Chart.js dibuja en un canvas y necesita el valor.
+ */
 export const COLORES_FORMA_PAGO: Record<FormaPago, string> = {
-  contado: "#2563eb", // azul
-  tarjeta: "#f59e0b", // ámbar
-  cuenta_corriente: "#059669", // verde
+  contado: "#3d4fb5", // índigo (primario)
+  tarjeta: "#dfa13a", // ámbar
+  cuenta_corriente: "#23895a", // verde
 };
 
-export const COLOR_VENTAS_DIARIAS = "#2563eb";
+export const COLOR_VENTAS_DIARIAS = "#3d4fb5";
 
 /** Valor de Chart.js (número en centavos) → pesos. Tolera valores no enteros de los ejes. */
 export function formatearCentavos(valor: number | string | null | undefined): string {

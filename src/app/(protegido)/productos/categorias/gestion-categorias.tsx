@@ -1,152 +1,176 @@
 "use client";
 
 /**
- * Gestión provisional de categorías (RF-P7). Solo administrador: alta,
- * cambio de nombre, baja y reactivación lógicas (con confirmación).
+ * Gestión de categorías (RF-P7). Solo administrador: alta, cambio de nombre
+ * (en una ventana modal), baja y reactivación lógicas (con confirmación).
  *
  * Valida con los mismos esquemas que el servidor y consume la API REST; la
  * regla «no desactivar con productos activos» la aplica el servicio
  * (409 CATEGORIA_EN_USO) y aquí solo se muestra su mensaje.
  */
+import { ArchiveRestoreIcon, ArchiveXIcon, PencilIcon, PlusIcon, TagsIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-import { ErrorDeApi, erroresDeZod, llamarApi } from "@/lib/cliente-api";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { EmptyState } from "@/components/estados/empty-state";
+import { FormField, propsCampo } from "@/components/formularios/form-field";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { useEnvio } from "@/hooks/usar-envio";
+import { avisos } from "@/lib/avisos";
+import { erroresDeZod, llamarApi } from "@/lib/cliente-api";
 import { esquemaAltaCategoria, esquemaEdicionCategoria } from "@/lib/validacion-productos";
 import type { CategoriaPublica } from "@/servicios/categorias";
 
-type Aviso = { tipo: "ok" | "error"; texto: string } | null;
-
 export function GestionCategorias({ categorias }: { categorias: CategoriaPublica[] }) {
   const router = useRouter();
-  const [aviso, setAviso] = useState<Aviso>(null);
   const [nombreNuevo, setNombreNuevo] = useState("");
-  const [errorNuevo, setErrorNuevo] = useState<string | undefined>();
-  const [editando, setEditando] = useState<{ id: number; nombre: string; error?: string } | null>(null);
-
-  function mostrarError(e: unknown) {
-    setAviso({ tipo: "error", texto: (e as Error).message });
-    return e instanceof ErrorDeApi ? e.campos : {};
-  }
+  const alta = useEnvio();
+  const [editando, setEditando] = useState<CategoriaPublica | null>(null);
 
   async function crear(evento: FormEvent) {
     evento.preventDefault();
-    setAviso(null);
     const validacion = esquemaAltaCategoria.safeParse({ nombre: nombreNuevo });
     if (!validacion.success) {
-      setErrorNuevo(erroresDeZod(validacion.error).nombre);
+      alta.setErrores(erroresDeZod(validacion.error));
       return;
     }
-    setErrorNuevo(undefined);
-    try {
-      const cat = await llamarApi<CategoriaPublica>("/api/categorias", {
-        method: "POST",
-        body: JSON.stringify(validacion.data),
-      });
-      setAviso({ tipo: "ok", texto: `Se creó la categoría «${cat.nombre}».` });
-      setNombreNuevo("");
-      router.refresh();
-    } catch (e) {
-      setErrorNuevo(mostrarError(e).nombre);
-    }
+    const cat = await alta.ejecutar(
+      () => llamarApi<CategoriaPublica>("/api/categorias", { method: "POST", body: JSON.stringify(validacion.data) }),
+      { exito: (c) => `Se creó la categoría «${c.nombre}».`, idError: "categoria-alta" },
+    );
+    if (!cat) return;
+    setNombreNuevo("");
+    router.refresh();
   }
 
-  async function guardarNombre(evento: FormEvent) {
+  async function cambiarEstado(cat: CategoriaPublica): Promise<boolean> {
+    try {
+      await llamarApi(`/api/categorias/${cat.id}`, { method: "PATCH", body: JSON.stringify({ activa: !cat.activa }) });
+    } catch (e) {
+      avisos.error((e as Error).message, { id: `categoria-estado-${cat.id}` });
+      return true;
+    }
+    avisos.exito(`Categoría «${cat.nombre}» ${cat.activa ? "desactivada" : "reactivada"}.`, { id: `categoria-estado-${cat.id}` });
+    router.refresh();
+    return true;
+  }
+
+  const columnas: Columna<CategoriaPublica>[] = [
+    { id: "nombre", encabezado: "Nombre", principal: true, className: "whitespace-normal", celda: (c) => <span className="font-medium">{c.nombre}</span> },
+    { id: "estado", encabezado: "Estado", celda: (c) => <StatusBadge estado={c.activa ? "activa" : "inactiva"} /> },
+  ];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Card className="shadow-suave">
+        <CardContent>
+          <form onSubmit={crear} noValidate className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <FormField id="categoria-nueva" etiqueta="Nueva categoría" error={alta.errores.nombre} className="flex-1 sm:max-w-sm">
+              <Input {...propsCampo("categoria-nueva", alta.errores.nombre)} value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} />
+            </FormField>
+            <Button type="submit" disabled={alta.enviando} className="w-full sm:w-fit">
+              <PlusIcon aria-hidden />
+              {alta.enviando ? "Creando…" : "Crear categoría"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <DataTable
+        etiqueta="Categorías"
+        columnas={columnas}
+        filas={categorias}
+        clave={(c) => c.id}
+        vacio={<EmptyState icono={TagsIcon} titulo="No hay categorías cargadas." descripcion="Cree la primera con el formulario de arriba." />}
+        acciones={(cat) => (
+          <>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditando(cat)} aria-label={`Renombrar ${cat.nombre}`}>
+              <PencilIcon aria-hidden />
+              Renombrar
+            </Button>
+            {cat.activa ? (
+              <ConfirmDialog
+                titulo={`¿Desactivar la categoría «${cat.nombre}»?`}
+                descripcion="No podrá asignarse a productos nuevos. Si tiene productos activos, el sistema no permitirá desactivarla."
+                textoConfirmar="Desactivar"
+                textoEnviando="Desactivando…"
+                alConfirmar={() => cambiarEstado(cat)}
+                disparador={
+                  <Button type="button" variant="destructive-soft" size="sm" aria-label={`Desactivar ${cat.nombre}`}>
+                    <ArchiveXIcon aria-hidden />
+                    Desactivar
+                  </Button>
+                }
+              />
+            ) : (
+              <Button type="button" variant="outline" size="sm" onClick={() => void cambiarEstado(cat)} aria-label={`Reactivar ${cat.nombre}`}>
+                <ArchiveRestoreIcon aria-hidden />
+                Reactivar
+              </Button>
+            )}
+          </>
+        )}
+      />
+
+      <DialogoRenombrar categoria={editando} onCerrar={() => setEditando(null)} />
+    </div>
+  );
+}
+
+function DialogoRenombrar({ categoria, onCerrar }: { categoria: CategoriaPublica | null; onCerrar: () => void }) {
+  return (
+    <Dialog open={categoria !== null} onOpenChange={(abierto) => !abierto && onCerrar()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Renombrar categoría</DialogTitle>
+          <DialogDescription>Los productos de la categoría conservan la asignación.</DialogDescription>
+        </DialogHeader>
+        {categoria && <FormularioNombre key={categoria.id} categoria={categoria} onListo={onCerrar} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FormularioNombre({ categoria, onListo }: { categoria: CategoriaPublica; onListo: () => void }) {
+  const router = useRouter();
+  const [nombre, setNombre] = useState(categoria.nombre);
+  const { enviando, errores, setErrores, ejecutar } = useEnvio();
+
+  async function guardar(evento: FormEvent) {
     evento.preventDefault();
-    if (!editando) return;
-    const validacion = esquemaEdicionCategoria.safeParse({ nombre: editando.nombre });
+    const validacion = esquemaEdicionCategoria.safeParse({ nombre });
     if (!validacion.success) {
-      setEditando({ ...editando, error: erroresDeZod(validacion.error).nombre });
+      setErrores(erroresDeZod(validacion.error));
       return;
     }
-    try {
-      await llamarApi(`/api/categorias/${editando.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(validacion.data),
-      });
-      setAviso({ tipo: "ok", texto: "Nombre actualizado." });
-      setEditando(null);
-      router.refresh();
-    } catch (e) {
-      setEditando({ ...editando, error: mostrarError(e).nombre });
-    }
-  }
-
-  async function cambiarEstado(cat: CategoriaPublica) {
-    if (cat.activa && !window.confirm(`¿Confirma que desea desactivar la categoría «${cat.nombre}»?`)) return;
-    setAviso(null);
-    try {
-      await llamarApi(`/api/categorias/${cat.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ activa: !cat.activa }),
-      });
-      setAviso({ tipo: "ok", texto: `Categoría «${cat.nombre}» ${cat.activa ? "desactivada" : "reactivada"}.` });
-      router.refresh();
-    } catch (e) {
-      mostrarError(e);
-    }
+    const ok = await ejecutar(
+      () => llamarApi(`/api/categorias/${categoria.id}`, { method: "PATCH", body: JSON.stringify(validacion.data) }),
+      { exito: () => "Nombre actualizado.", idError: "categoria-nombre" },
+    );
+    if (ok === undefined) return;
+    onListo();
+    router.refresh();
   }
 
   return (
-    <div className="flex flex-col gap-4 text-sm">
-      {aviso && (
-        <p role={aviso.tipo === "error" ? "alert" : "status"} className={aviso.tipo === "error" ? "text-red-700" : "text-green-700"}>
-          {aviso.texto}
-        </p>
-      )}
-
-      <form onSubmit={crear} noValidate className="flex flex-wrap items-end gap-3 rounded border p-4">
-        <label className="flex flex-col gap-1">
-          Nueva categoría
-          <input value={nombreNuevo} onChange={(e) => setNombreNuevo(e.target.value)} className="rounded border px-2 py-1" />
-          {errorNuevo && <span className="text-red-700">{errorNuevo}</span>}
-        </label>
-        <button type="submit" className="rounded border px-3 py-1">
-          Crear
-        </button>
-      </form>
-
-      <table className="w-full max-w-2xl text-left">
-        <thead>
-          <tr className="border-b">
-            <th className="py-2 pr-3">Nombre</th>
-            <th className="py-2 pr-3">Estado</th>
-            <th className="py-2 pr-3">Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {categorias.map((cat) => (
-            <tr key={cat.id} className="border-b">
-              <td className="py-2 pr-3">
-                {editando?.id === cat.id ? (
-                  <form onSubmit={guardarNombre} noValidate className="flex flex-wrap items-center gap-2">
-                    <input
-                      value={editando.nombre}
-                      onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
-                      className="rounded border px-2 py-1"
-                      autoFocus
-                    />
-                    <button type="submit" className="rounded border px-2 py-0.5">Guardar</button>
-                    <button type="button" onClick={() => setEditando(null)} className="rounded border px-2 py-0.5">Cancelar</button>
-                    {editando.error && <span className="w-full text-red-700">{editando.error}</span>}
-                  </form>
-                ) : (
-                  cat.nombre
-                )}
-              </td>
-              <td className="py-2 pr-3">{cat.activa ? "Activa" : "Inactiva"}</td>
-              <td className="flex gap-2 py-2 pr-3">
-                <button type="button" onClick={() => setEditando({ id: cat.id, nombre: cat.nombre })} className="rounded border px-2 py-0.5">
-                  Renombrar
-                </button>
-                <button type="button" onClick={() => cambiarEstado(cat)} className="rounded border px-2 py-0.5">
-                  {cat.activa ? "Desactivar" : "Reactivar"}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <form onSubmit={guardar} noValidate className="flex flex-col gap-4">
+      <FormField id="categoria-nombre" etiqueta="Nombre" error={errores.nombre}>
+        <Input {...propsCampo("categoria-nombre", errores.nombre)} value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
+      </FormField>
+      <DialogFooter className="-mx-4 -mb-4">
+        <Button type="button" variant="outline" onClick={onListo} disabled={enviando}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

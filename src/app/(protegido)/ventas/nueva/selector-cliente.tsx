@@ -8,8 +8,14 @@
  * mouse o con el teclado (flechas y Enter) y quitarlos sin perder los ítems.
  * El alta rápida se abre en una ventana modal (alta-rapida-cliente.tsx).
  */
+import { UserPlusIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { useState, type KeyboardEvent, type Ref } from "react";
 
+import { ErrorCampo } from "@/components/formularios/form-field";
+import { SearchInput } from "@/components/formularios/search-input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   clientesSeleccionables,
   moverIndice,
@@ -17,10 +23,12 @@ import {
   type ClienteVenta,
 } from "@/lib/borrador-venta";
 import { formatearDocumento, formatearMoneda } from "@/lib/formatos";
+import { cn } from "@/lib/utils";
 import { NOMBRE_CONSUMIDOR_FINAL } from "@/lib/validacion-facturas";
 import type { ClientePublico } from "@/servicios/clientes";
 
 import { MensajeBusqueda } from "./estado-busqueda";
+import { SeccionVenta } from "./seccion-venta";
 import { useBusqueda } from "./usar-busqueda";
 
 type Props = {
@@ -58,64 +66,63 @@ export function SelectorCliente({ cliente, onSeleccionar, onQuitar, onAltaRapida
   }
 
   return (
-    <section aria-labelledby="titulo-comprador" className="flex flex-col gap-3 rounded border p-4">
-      <h2 id="titulo-comprador" className="text-lg font-semibold">
-        1. Comprador
-      </h2>
-
+    <SeccionVenta id="titulo-comprador" numero={1} titulo="Comprador" atajo="F4">
       {cliente === null ? (
-        <p>
-          <strong>{NOMBRE_CONSUMIDOR_FINAL}</strong> <span className="text-sm text-gray-600">(no requiere datos)</span>
-        </p>
+        <div className="flex items-center gap-3 rounded-lg bg-muted/60 px-3 py-2.5">
+          <UserRoundIcon aria-hidden className="size-5 text-muted-foreground" />
+          <p className="text-sm">
+            <strong className="font-semibold">{NOMBRE_CONSUMIDOR_FINAL}</strong>{" "}
+            <span className="text-muted-foreground">(no requiere datos)</span>
+          </p>
+        </div>
       ) : (
-        <div className="flex flex-col gap-2 rounded bg-gray-50 p-3 text-sm">
-          <p className="text-base font-semibold">{cliente.nombre}</p>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-            <dt>Documento</dt>
-            <dd>
+        <div className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-accent/60 p-3 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 text-base font-semibold break-words">{cliente.nombre}</p>
+            {cliente.cuentaCorriente && <Badge variant="outline">Cta. cte.</Badge>}
+          </div>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
+            <dt className="text-muted-foreground">Documento</dt>
+            <dd className="text-right tabular-nums">
               {cliente.tipoDoc} {formatearDocumento(cliente.tipoDoc, cliente.nroDoc)}
             </dd>
-            <dt>Saldo</dt>
-            <dd>{formatearMoneda(cliente.saldo)}</dd>
-            <dt>Cuenta corriente</dt>
-            <dd>{cliente.cuentaCorriente ? "Habilitada" : "No habilitada"}</dd>
+            <dt className="text-muted-foreground">Saldo</dt>
+            <dd className="text-right tabular-nums">{formatearMoneda(cliente.saldo)}</dd>
+            <dt className="text-muted-foreground">Cuenta corriente</dt>
+            <dd className="text-right">{cliente.cuentaCorriente ? "Habilitada" : "No habilitada"}</dd>
             {cliente.cuentaCorriente && (
               <>
-                <dt>Límite</dt>
-                <dd>{cliente.limiteCredito === null ? "Sin límite" : formatearMoneda(cliente.limiteCredito)}</dd>
-                <dt>Crédito disponible</dt>
-                <dd>{cliente.disponible === null ? "Sin límite" : formatearMoneda(cliente.disponible)}</dd>
+                <dt className="text-muted-foreground">Límite</dt>
+                <dd className="text-right tabular-nums">{cliente.limiteCredito === null ? "Sin límite" : formatearMoneda(cliente.limiteCredito)}</dd>
+                <dt className="text-muted-foreground">Crédito disponible</dt>
+                <dd className="text-right tabular-nums">{cliente.disponible === null ? "Sin límite" : formatearMoneda(cliente.disponible)}</dd>
               </>
             )}
           </dl>
-          <button type="button" onClick={onQuitar} className="w-fit rounded border bg-white px-3 py-1">
+          <Button type="button" variant="outline" size="sm" onClick={onQuitar} className="w-fit">
+            <XIcon aria-hidden />
             Quitar cliente (volver a consumidor final)
-          </button>
+          </Button>
         </div>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorCampo>{error}</ErrorCampo>}
 
-      <div className="flex flex-col gap-1 text-sm">
-        <label htmlFor="busqueda-cliente">
-          {cliente === null ? "Buscar cliente" : "Cambiar cliente"} por nombre o documento <kbd className="text-xs">(F4)</kbd>
-        </label>
-        <input
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="busqueda-cliente" className="leading-snug">
+          {cliente === null ? "Buscar cliente" : "Cambiar cliente"} por nombre o documento <kbd className="text-xs font-normal text-muted-foreground">(F4)</kbd>
+        </Label>
+        <SearchInput
           id="busqueda-cliente"
           ref={busquedaRef}
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={teclaEnBusqueda}
-          autoComplete="off"
           role="combobox"
           aria-expanded={resultados.length > 0}
           aria-controls="resultados-cliente"
           aria-activedescendant={resultados[indice] ? `cliente-${resultados[indice].id}` : undefined}
+          aria-keyshortcuts="F4"
           placeholder="Ej.: López o 28456123"
-          className="rounded border px-2 py-1"
         />
         <MensajeBusqueda
           estado={estado}
@@ -124,7 +131,7 @@ export function SelectorCliente({ cliente, onSeleccionar, onQuitar, onAltaRapida
           onReintentar={reintentar}
         />
         {resultados.length > 0 && (
-          <ul id="resultados-cliente" role="listbox" aria-label="Clientes encontrados" className="max-h-60 overflow-y-auto rounded border">
+          <ul id="resultados-cliente" role="listbox" aria-label="Clientes encontrados" className="max-h-60 overflow-y-auto rounded-lg border bg-card shadow-suave">
             {resultados.map((c, i) => (
               <li
                 key={c.id}
@@ -133,12 +140,13 @@ export function SelectorCliente({ cliente, onSeleccionar, onQuitar, onAltaRapida
                 aria-selected={i === indice}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => elegir(c)}
-                className={`flex cursor-pointer flex-wrap justify-between gap-2 border-b px-2 py-1 last:border-b-0 ${
-                  i === indice ? "bg-blue-100" : ""
-                }`}
+                className={cn(
+                  "flex cursor-pointer flex-col gap-0.5 border-b px-3 py-2 text-sm last:border-b-0 hover:bg-muted",
+                  i === indice && "bg-accent text-accent-foreground hover:bg-accent",
+                )}
               >
-                <span>{c.nombre}</span>
-                <span className="text-gray-600">
+                <span className="font-medium">{c.nombre}</span>
+                <span className="text-xs text-muted-foreground">
                   {c.tipoDoc} {formatearDocumento(c.tipoDoc, c.nroDoc)} · Saldo {formatearMoneda(c.saldo)}
                   {c.cuentaCorriente ? " · Cta. cte." : ""}
                 </span>
@@ -148,9 +156,10 @@ export function SelectorCliente({ cliente, onSeleccionar, onQuitar, onAltaRapida
         )}
       </div>
 
-      <button type="button" onClick={onAltaRapida} className="w-fit rounded border px-3 py-1 text-sm">
+      <Button type="button" variant="secondary" size="sm" onClick={onAltaRapida} className="w-fit">
+        <UserPlusIcon aria-hidden />
         Alta rápida de cliente
-      </button>
-    </section>
+      </Button>
+    </SeccionVenta>
   );
 }

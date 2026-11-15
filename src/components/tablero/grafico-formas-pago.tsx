@@ -31,7 +31,7 @@ export function GraficoFormasPago({ formas }: { formas: VentaPorForma[] }) {
   return (
     <div className="flex flex-col gap-4">
       {todosEnCero(formas) ? (
-        <p className="py-10 text-center text-sm opacity-70">
+        <p className="py-10 text-center text-sm text-muted-foreground">
           No se registraron ventas en el mes: todas las formas de pago suman $ 0,00.
         </p>
       ) : (
@@ -47,7 +47,7 @@ export function GraficoFormasPago({ formas }: { formas: VentaPorForma[] }) {
               {ETIQUETAS_FORMA_PAGO[f.forma]}
             </span>
             <span className="text-right tabular-nums">
-              {formatearMoneda(f.importe)} <span className="opacity-60">({porcentaje(f.importe, total)})</span>
+              {formatearMoneda(f.importe)} <span className="text-muted-foreground">({porcentaje(f.importe, total)})</span>
             </span>
           </li>
         ))}

@@ -5,22 +5,31 @@
  * base y, si no es administrador, no muestra el módulo ni carga datos. La
  * tercera barrera es el servicio: la API responde 403 aunque se la llame
  * directamente.
- *
- * PROVISORIO: interfaz mínima para verificar el módulo. El diseño definitivo
- * (panel lateral, shadcn/ui) llega en una etapa posterior.
  */
+import { ShieldOffIcon } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 
+import { EmptyState } from "@/components/estados/empty-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
 import { tieneRol } from "@/servicios/permisos";
 
 import { GestionUsuarios } from "./gestion-usuarios";
 
+export const metadata: Metadata = { title: "Usuarios" };
+
 export default function PaginaUsuarios() {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando…</p>}>
-      <Contenido />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState texto="Cargando…" />}>
+        <Contenido />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -29,10 +38,18 @@ async function Contenido() {
 
   if (!tieneRol(usuario, "admin")) {
     return (
-      <section className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Acceso denegado</h1>
-        <p role="alert">No tiene permiso para acceder a la gestión de usuarios.</p>
-      </section>
+      <>
+        <PageHeader titulo="Acceso denegado" />
+        <EmptyState
+          icono={ShieldOffIcon}
+          titulo="No tiene permiso para acceder a la gestión de usuarios."
+          accion={
+            <Button asChild variant="outline">
+              <Link href="/">Ir al inicio</Link>
+            </Button>
+          }
+        />
+      </>
     );
   }
 

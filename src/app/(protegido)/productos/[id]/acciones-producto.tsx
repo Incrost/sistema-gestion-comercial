@@ -1,156 +1,203 @@
 "use client";
 
 /**
- * Acciones provisionales del administrador en la ficha del producto:
- * - ingreso y egreso manual de stock (RF-P4, RF-P5);
- * - baja y reactivación lógica (RF-P3), con confirmación.
+ * Acciones del administrador en la ficha del producto:
+ * - ingreso y egreso manual de stock (RF-P4, RF-P5); el egreso se confirma
+ *   antes de enviarse porque descuenta existencias;
+ * - baja y reactivación lógica (RF-P3); la baja se confirma.
  *
  * Valida con los mismos esquemas que el servidor y consume la API REST. Los
  * motivos salen de la lista centralizada src/config/motivos-stock.ts.
  */
+import { ArchiveRestoreIcon, ArchiveXIcon, ArrowDownToLineIcon, ArrowUpFromLineIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormField, propsCampo } from "@/components/formularios/form-field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { MOTIVOS_POR_TIPO, type TipoMovimientoManual } from "@/config/motivos-stock";
-import { ErrorDeApi, erroresDeZod, llamarApi, type ErroresCampo } from "@/lib/cliente-api";
+import { useEnvio } from "@/hooks/usar-envio";
+import { ErrorDeApi, erroresDeZod, llamarApi } from "@/lib/cliente-api";
+import { avisos } from "@/lib/avisos";
+import { cn } from "@/lib/utils";
 import { esquemaMovimientoManual } from "@/lib/validacion-productos";
 import type { ProductoPublico } from "@/servicios/productos";
 import type { MovimientoPublico } from "@/servicios/stock";
 
-type Aviso = { tipo: "ok" | "error"; texto: string } | null;
+const TIPOS: { valor: TipoMovimientoManual; texto: string; icono: typeof ArrowDownToLineIcon }[] = [
+  { valor: "ingreso", texto: "Ingreso", icono: ArrowDownToLineIcon },
+  { valor: "egreso", texto: "Egreso", icono: ArrowUpFromLineIcon },
+];
 
-export function FormularioMovimiento({ productoId }: { productoId: number }) {
+export function FormularioMovimiento({ producto }: { producto: Pick<ProductoPublico, "id" | "codigo" | "existencia"> }) {
   const router = useRouter();
   const [tipo, setTipo] = useState<TipoMovimientoManual>("ingreso");
   const [cantidad, setCantidad] = useState("1");
   const [motivo, setMotivo] = useState<string>(MOTIVOS_POR_TIPO.ingreso[0]);
   const [observacion, setObservacion] = useState("");
-  const [errores, setErrores] = useState<ErroresCampo>({});
-  const [aviso, setAviso] = useState<Aviso>(null);
-  const [enviando, setEnviando] = useState(false);
+  const [confirmandoEgreso, setConfirmandoEgreso] = useState(false);
+  const { enviando, errores, setErrores, ejecutar } = useEnvio();
 
   function cambiarTipo(nuevo: TipoMovimientoManual) {
     setTipo(nuevo);
     setMotivo(MOTIVOS_POR_TIPO[nuevo][0]);
+    setErrores({});
   }
 
-  async function enviar(evento: FormEvent) {
-    evento.preventDefault();
-    setAviso(null);
-    const cuerpo = { tipo, cantidad: Number(cantidad), motivo, observacion };
-    const validacion = esquemaMovimientoManual.safeParse(cuerpo);
+  function validar() {
+    const validacion = esquemaMovimientoManual.safeParse({ tipo, cantidad: Number(cantidad), motivo, observacion });
     if (!validacion.success) {
       setErrores(erroresDeZod(validacion.error));
-      return;
+      return null;
     }
-    setErrores({});
-    setEnviando(true);
-    try {
-      const mov = await llamarApi<MovimientoPublico>(`/api/productos/${productoId}/movimientos`, {
-        method: "POST",
-        body: JSON.stringify(validacion.data),
-      });
-      setAviso({
-        tipo: "ok",
-        texto: `${mov.tipo === "ingreso" ? "Ingreso" : "Egreso"} registrado. Existencia resultante: ${mov.existenciaResultante}.`,
-      });
-      setCantidad("1");
-      setObservacion("");
-      router.refresh();
-    } catch (e) {
-      if (e instanceof ErrorDeApi) setErrores(e.campos);
-      setAviso({ tipo: "error", texto: (e as Error).message });
-    } finally {
-      setEnviando(false);
-    }
+    return validacion.data;
+  }
+
+  async function registrar(): Promise<boolean> {
+    const datos = validar();
+    if (!datos) return false;
+    const mov = await ejecutar(
+      () => llamarApi<MovimientoPublico>(`/api/productos/${producto.id}/movimientos`, { method: "POST", body: JSON.stringify(datos) }),
+      {
+        exito: (m) => `${m.tipo === "ingreso" ? "Ingreso" : "Egreso"} registrado. Existencia resultante: ${m.existenciaResultante}.`,
+        idError: "movimiento-error",
+      },
+    );
+    if (!mov) return true; // el error se informó; el diálogo de confirmación se cierra
+    setCantidad("1");
+    setObservacion("");
+    router.refresh();
+    return true;
+  }
+
+  function enviar(evento: FormEvent) {
+    evento.preventDefault();
+    if (!validar()) return;
+    // El egreso descuenta existencias: se confirma antes de enviarlo.
+    if (tipo === "egreso") setConfirmandoEgreso(true);
+    else void registrar();
   }
 
   return (
-    <form onSubmit={enviar} noValidate className="flex flex-col gap-3 rounded border p-4 text-sm">
-      <h2 className="text-lg font-semibold">Ingreso o egreso de stock</h2>
-      {aviso && (
-        <p role={aviso.tipo === "error" ? "alert" : "status"} className={aviso.tipo === "error" ? "text-red-700" : "text-green-700"}>
-          {aviso.texto}
-        </p>
-      )}
+    <form onSubmit={enviar} noValidate className="flex flex-col gap-4">
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">Tipo de movimiento</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {TIPOS.map(({ valor, texto, icono: Icono }) => (
+            <label
+              key={valor}
+              className={cn(
+                "flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 text-sm transition-colors hover:bg-muted",
+                "has-[:checked]:border-primary has-[:checked]:bg-accent has-[:checked]:font-medium has-[:checked]:text-accent-foreground",
+                "has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
+              )}
+            >
+              <input type="radio" name="tipo-movimiento" value={valor} checked={tipo === valor} onChange={() => cambiarTipo(valor)} className="size-4 accent-primary" />
+              <Icono aria-hidden className="size-4" />
+              {texto}
+            </label>
+          ))}
+        </div>
+        {errores.tipo && <p className="text-xs text-destructive">{errores.tipo}</p>}
+      </fieldset>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1">
-          Tipo
-          <select value={tipo} onChange={(e) => cambiarTipo(e.target.value as TipoMovimientoManual)} className="rounded border px-2 py-1">
-            <option value="ingreso">Ingreso</option>
-            <option value="egreso">Egreso</option>
-          </select>
-          {errores.tipo && <span className="text-red-700">{errores.tipo}</span>}
-        </label>
-        <label className="flex flex-col gap-1">
-          Cantidad
-          <input type="number" min={1} step={1} value={cantidad} onChange={(e) => setCantidad(e.target.value)} className="rounded border px-2 py-1" />
-          {errores.cantidad && <span className="text-red-700">{errores.cantidad}</span>}
-        </label>
-        <label className="flex flex-col gap-1">
-          Motivo
-          <select value={motivo} onChange={(e) => setMotivo(e.target.value)} className="rounded border px-2 py-1">
+        <FormField id="mov-cantidad" etiqueta="Cantidad" error={errores.cantidad}>
+          <Input
+            {...propsCampo("mov-cantidad", errores.cantidad)}
+            type="number"
+            min={1}
+            step={1}
+            value={cantidad}
+            onChange={(e) => setCantidad(e.target.value)}
+            className="tabular-nums"
+          />
+        </FormField>
+        <FormField id="mov-motivo" etiqueta="Motivo" error={errores.motivo}>
+          <NativeSelect {...propsCampo("mov-motivo", errores.motivo)} value={motivo} onChange={(e) => setMotivo(e.target.value)} className="w-full">
             {MOTIVOS_POR_TIPO[tipo].map((m) => (
-              <option key={m} value={m}>
+              <NativeSelectOption key={m} value={m}>
                 {m}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-          {errores.motivo && <span className="text-red-700">{errores.motivo}</span>}
-        </label>
-        <label className="flex flex-col gap-1">
-          Observación (opcional)
-          <input value={observacion} onChange={(e) => setObservacion(e.target.value)} className="rounded border px-2 py-1" />
-          {errores.observacion && <span className="text-red-700">{errores.observacion}</span>}
-        </label>
+          </NativeSelect>
+        </FormField>
+        <FormField id="mov-observacion" etiqueta="Observación (opcional)" error={errores.observacion} className="sm:col-span-2">
+          <Input {...propsCampo("mov-observacion", errores.observacion)} value={observacion} onChange={(e) => setObservacion(e.target.value)} />
+        </FormField>
       </div>
-      <button type="submit" disabled={enviando} className="w-fit rounded border px-3 py-1 disabled:opacity-50">
-        {enviando ? "Registrando…" : "Registrar movimiento"}
-      </button>
+      <Button type="submit" disabled={enviando} variant={tipo === "egreso" ? "destructive-soft" : "default"} className="w-full sm:w-fit">
+        {enviando ? "Registrando…" : tipo === "ingreso" ? "Registrar ingreso" : "Registrar egreso"}
+      </Button>
+
+      <ConfirmDialog
+        abierto={confirmandoEgreso}
+        onAbiertoCambia={setConfirmandoEgreso}
+        titulo={`¿Registrar el egreso de ${cantidad} ${Number(cantidad) === 1 ? "unidad" : "unidades"}?`}
+        descripcion={
+          <>
+            Se descontarán de la existencia de <strong>{producto.codigo}</strong> (actual: {producto.existencia}) con el motivo «{motivo}». El
+            movimiento queda registrado y no se puede eliminar.
+          </>
+        }
+        textoConfirmar="Registrar egreso"
+        textoEnviando="Registrando…"
+        alConfirmar={registrar}
+      />
     </form>
   );
 }
 
 export function BotonEstadoProducto({ producto }: { producto: ProductoPublico }) {
   const router = useRouter();
-  const [aviso, setAviso] = useState<Aviso>(null);
-  const [enviando, setEnviando] = useState(false);
 
-  async function cambiar() {
-    if (
-      producto.activo &&
-      !window.confirm(
-        `¿Confirma que desea dar de baja ${producto.codigo}? Dejará de ofrecerse en ventas, pero conservará su historial.`,
-      )
-    ) {
-      return;
-    }
-    setEnviando(true);
+  async function cambiar(): Promise<boolean> {
     try {
-      await llamarApi(`/api/productos/${producto.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ activo: !producto.activo }),
-      });
-      setAviso({ tipo: "ok", texto: producto.activo ? "Producto dado de baja." : "Producto reactivado." });
-      router.refresh();
+      await llamarApi(`/api/productos/${producto.id}`, { method: "PATCH", body: JSON.stringify({ activo: !producto.activo }) });
     } catch (e) {
       const campos = e instanceof ErrorDeApi ? Object.values(e.campos) : [];
-      setAviso({ tipo: "error", texto: [(e as Error).message, ...campos].join(" ") });
-    } finally {
-      setEnviando(false);
+      avisos.error([(e as Error).message, ...campos].join(" "), { id: `producto-estado-${producto.id}` });
+      return true;
     }
+    avisos.exito(producto.activo ? `Producto ${producto.codigo} dado de baja.` : `Producto ${producto.codigo} reactivado.`, {
+      id: `producto-estado-${producto.id}`,
+    });
+    router.refresh();
+    return true;
   }
 
+  if (!producto.activo) {
+    return (
+      <ConfirmDialog
+        destructivo={false}
+        titulo={`¿Reactivar ${producto.codigo}?`}
+        descripcion="El producto volverá a ofrecerse en las ventas."
+        textoConfirmar="Reactivar"
+        alConfirmar={cambiar}
+        disparador={
+          <Button variant="outline">
+            <ArchiveRestoreIcon aria-hidden />
+            Reactivar
+          </Button>
+        }
+      />
+    );
+  }
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm">
-      <button type="button" onClick={cambiar} disabled={enviando} className="rounded border px-3 py-1 disabled:opacity-50">
-        {producto.activo ? "Dar de baja" : "Reactivar"}
-      </button>
-      {aviso && (
-        <span role={aviso.tipo === "error" ? "alert" : "status"} className={aviso.tipo === "error" ? "text-red-700" : "text-green-700"}>
-          {aviso.texto}
-        </span>
-      )}
-    </div>
+    <ConfirmDialog
+      titulo={`¿Dar de baja ${producto.codigo}?`}
+      descripcion="Dejará de ofrecerse en las ventas, pero conservará su historial de movimientos y facturas. Podrá reactivarse más adelante."
+      textoConfirmar="Dar de baja"
+      textoEnviando="Dando de baja…"
+      alConfirmar={cambiar}
+      disparador={
+        <Button variant="destructive-soft">
+          <ArchiveXIcon aria-hidden />
+          Dar de baja
+        </Button>
+      }
+    />
   );
 }

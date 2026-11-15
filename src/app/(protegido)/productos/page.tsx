@@ -5,22 +5,38 @@
  * Server Component: llama directamente a los servicios (sección 10.6), que
  * validan los parámetros y verifican el rol. Búsqueda, filtros y página viven
  * en la URL, así el listado se puede recargar y compartir.
- *
- * PROVISORIO: interfaz mínima para verificar el módulo. El diseño definitivo
- * (panel lateral, shadcn/ui) llega en una etapa posterior.
  */
-import Form from "next/form";
+import { PackageSearchIcon, TagsIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { DataTable, type Columna } from "@/components/datos/data-table";
+import { Pagination } from "@/components/datos/pagination";
+import { StatusBadge } from "@/components/datos/status-badge";
+import { EmptyState } from "@/components/estados/empty-state";
+import { ErrorState } from "@/components/estados/error-state";
+import { LoadingState } from "@/components/estados/loading-state";
+import { FilterBar } from "@/components/formularios/filter-bar";
+import { FormField } from "@/components/formularios/form-field";
+import { SearchInput } from "@/components/formularios/search-input";
+import { PageContainer } from "@/components/layout/page-container";
+import { PageHeader } from "@/components/layout/page-header";
+import { Fila, Texto } from "@/components/layout/primitivas";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { normalizarError } from "@/lib/api-error";
 import { formatearMoneda } from "@/lib/formatos";
 import { exigirUsuarioDePagina } from "@/lib/sesion-pagina";
 import { listarCategorias } from "@/servicios/categorias";
 import { tieneRol } from "@/servicios/permisos";
-import { listarProductos } from "@/servicios/productos";
+import { listarProductos, type ProductoPublico } from "@/servicios/productos";
 
-import { FormularioProducto } from "./formulario-producto";
+import { DialogoProducto } from "./formulario-producto";
+
+export const metadata: Metadata = { title: "Productos" };
 
 type ParametrosBusqueda = Promise<Record<string, string | string[] | undefined>>;
 
@@ -28,9 +44,11 @@ const TAMANIO_PAGINA = 10;
 
 export default function PaginaProductos({ searchParams }: { searchParams: ParametrosBusqueda }) {
   return (
-    <Suspense fallback={<p className="text-sm">Cargando catálogo…</p>}>
-      <Catalogo searchParams={searchParams} />
-    </Suspense>
+    <PageContainer>
+      <Suspense fallback={<LoadingState texto="Cargando catálogo…" />}>
+        <Catalogo searchParams={searchParams} />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -38,6 +56,46 @@ export default function PaginaProductos({ searchParams }: { searchParams: Parame
 function primero(valor: string | string[] | undefined): string | undefined {
   return Array.isArray(valor) ? valor[0] : valor;
 }
+
+const COLUMNAS: Columna<ProductoPublico>[] = [
+  {
+    id: "codigo",
+    encabezado: "Código",
+    principal: true,
+    celda: (p) => (
+      <Link href={`/productos/${p.id}`} className="font-mono font-medium text-primary hover:underline">
+        {p.codigo}
+      </Link>
+    ),
+  },
+  { id: "descripcion", encabezado: "Descripción", principal: true, className: "whitespace-normal min-w-48", celda: (p) => p.descripcion },
+  { id: "categoria", encabezado: "Categoría", celda: (p) => p.categoria.nombre },
+  { id: "precio", encabezado: "Precio", alinear: "derecha", celda: (p) => formatearMoneda(p.precio) },
+  {
+    id: "existencia",
+    encabezado: "Existencia",
+    alinear: "derecha",
+    celda: (p) => (
+      <Texto as="span" numerico tono={p.bajoMinimo ? "advertencia" : "normal"} peso={p.bajoMinimo ? "fuerte" : "normal"}>
+        {p.existencia}
+      </Texto>
+    ),
+  },
+  { id: "minimo", encabezado: "Mínimo", alinear: "derecha", celda: (p) => p.stockMinimo },
+  {
+    id: "estado",
+    encabezado: "Estado",
+    celda: (p) =>
+      p.bajoMinimo || !p.activo ? (
+        <Fila gap="xs" className="justify-end md:justify-start">
+          {p.bajoMinimo && <StatusBadge estado="bajo-minimo" />}
+          {!p.activo && <StatusBadge estado="inactivo" />}
+        </Fila>
+      ) : (
+        <StatusBadge estado="activo" />
+      ),
+  },
+];
 
 async function Catalogo({ searchParams }: { searchParams: ParametrosBusqueda }) {
   const usuario = await exigirUsuarioDePagina(); // RF-U2
@@ -51,22 +109,19 @@ async function Catalogo({ searchParams }: { searchParams: ParametrosBusqueda }) 
     activo: esAdmin ? (primero(parametros.activo) ?? "true") : "true",
     page: primero(parametros.page) ?? "1",
   };
+  const hayFiltros = Boolean(filtros.q || filtros.categoriaId || filtros.bajoMinimo || filtros.activo !== "true");
 
-  const categorias = await listarCategorias(usuario);
+  let categorias;
   let lista;
   try {
+    categorias = await listarCategorias(usuario);
     lista = await listarProductos(usuario, { ...filtros, pageSize: String(TAMANIO_PAGINA) });
   } catch (error) {
     return (
-      <section className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Productos</h1>
-        <p role="alert" className="text-red-700">
-          {normalizarError(error).message}
-        </p>
-        <Link href="/productos" className="underline">
-          Volver al catálogo
-        </Link>
-      </section>
+      <>
+        <PageHeader titulo="Productos" />
+        <ErrorState titulo="No se pudo cargar el catálogo" mensaje={normalizarError(error).message} volver={{ href: "/productos", texto: "Volver al catálogo" }} />
+      </>
     );
   }
 
@@ -83,104 +138,68 @@ async function Catalogo({ searchParams }: { searchParams: ParametrosBusqueda }) 
   };
 
   return (
-    <section className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-semibold">Productos</h1>
-        <Link href="/productos/categorias" className="text-sm underline">
-          Categorías
-        </Link>
-      </div>
+    <>
+      <PageHeader
+        titulo="Productos"
+        descripcion="Catálogo con precios, existencias y stock mínimo."
+        acciones={
+          <>
+            <Button asChild variant="outline">
+              <Link href="/productos/categorias">
+                <TagsIcon aria-hidden />
+                Categorías
+              </Link>
+            </Button>
+            {esAdmin && <DialogoProducto categorias={categorias} />}
+          </>
+        }
+      />
 
-      {/* Filtros: un formulario GET que escribe los parámetros en la URL. */}
-      <Form action="/productos" className="flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          Buscar por código o descripción
-          <input name="q" defaultValue={filtros.q} className="rounded border px-2 py-1" />
-        </label>
-        <label className="flex flex-col gap-1">
-          Categoría
-          <select name="categoriaId" defaultValue={filtros.categoriaId} className="rounded border px-2 py-1">
-            <option value="">Todas</option>
+      <FilterBar action="/productos" hayFiltros={hayFiltros} etiqueta="Filtros del catálogo">
+        <FormField id="filtro-q" etiqueta="Buscar por código o descripción" className="sm:col-span-2">
+          <SearchInput id="filtro-q" name="q" defaultValue={filtros.q} placeholder="Ej.: HE-001 o martillo" />
+        </FormField>
+        <FormField id="filtro-categoria" etiqueta="Categoría">
+          <NativeSelect id="filtro-categoria" name="categoriaId" defaultValue={filtros.categoriaId} className="w-full">
+            <NativeSelectOption value="">Todas</NativeSelectOption>
             {categorias.map((c) => (
-              <option key={c.id} value={c.id}>
+              <NativeSelectOption key={c.id} value={c.id}>
                 {c.nombre}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" name="bajoMinimo" value="true" defaultChecked={filtros.bajoMinimo === "true"} />
-          Solo bajo el mínimo
-        </label>
+          </NativeSelect>
+        </FormField>
         {esAdmin && (
-          <label className="flex flex-col gap-1">
-            Estado
-            <select name="activo" defaultValue={filtros.activo} className="rounded border px-2 py-1">
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-              <option value="todos">Todos</option>
-            </select>
-          </label>
+          <FormField id="filtro-activo" etiqueta="Estado">
+            <NativeSelect id="filtro-activo" name="activo" defaultValue={filtros.activo} className="w-full">
+              <NativeSelectOption value="true">Activos</NativeSelectOption>
+              <NativeSelectOption value="false">Inactivos</NativeSelectOption>
+              <NativeSelectOption value="todos">Todos</NativeSelectOption>
+            </NativeSelect>
+          </FormField>
         )}
-        <button type="submit" className="rounded border px-3 py-1">
-          Filtrar
-        </button>
-        <Link href="/productos" className="underline">
-          Limpiar
-        </Link>
-      </Form>
+        <Fila gap="sm" envolver={false} className="h-9">
+          <Checkbox id="filtro-bajo-minimo" name="bajoMinimo" value="true" defaultChecked={filtros.bajoMinimo === "true"} />
+          <Label htmlFor="filtro-bajo-minimo">Solo bajo el mínimo</Label>
+        </Fila>
+      </FilterBar>
 
-      {lista.data.length === 0 ? (
-        <p className="text-sm">No hay productos que coincidan con la búsqueda.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-2 pr-3">Código</th>
-                <th className="py-2 pr-3">Descripción</th>
-                <th className="py-2 pr-3">Categoría</th>
-                <th className="py-2 pr-3 text-right">Precio</th>
-                <th className="py-2 pr-3 text-right">Existencia</th>
-                <th className="py-2 pr-3 text-right">Mínimo</th>
-                <th className="py-2 pr-3">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.data.map((p) => (
-                <tr key={p.id} className="border-b">
-                  <td className="py-2 pr-3 font-mono">
-                    <Link href={`/productos/${p.id}`} className="underline">
-                      {p.codigo}
-                    </Link>
-                  </td>
-                  <td className="py-2 pr-3">{p.descripcion}</td>
-                  <td className="py-2 pr-3">{p.categoria.nombre}</td>
-                  <td className="py-2 pr-3 text-right">{formatearMoneda(p.precio)}</td>
-                  <td className="py-2 pr-3 text-right">{p.existencia}</td>
-                  <td className="py-2 pr-3 text-right">{p.stockMinimo}</td>
-                  <td className="py-2 pr-3">
-                    {p.bajoMinimo && (
-                      <span className="mr-2 rounded bg-amber-200 px-2 py-0.5 text-amber-900">Bajo mínimo</span>
-                    )}
-                    {!p.activo && <span className="rounded bg-gray-200 px-2 py-0.5">Inactivo</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        etiqueta="Productos"
+        columnas={COLUMNAS}
+        filas={lista.data}
+        clave={(p) => p.id}
+        claseFila={(p) => (!p.activo ? "text-muted-foreground" : undefined)}
+        vacio={
+          <EmptyState
+            icono={PackageSearchIcon}
+            titulo="No hay productos que coincidan con la búsqueda."
+            descripcion={hayFiltros ? "Pruebe con otros filtros o límpielos para ver todo el catálogo." : undefined}
+          />
+        }
+      />
 
-      <nav className="flex items-center gap-3 text-sm" aria-label="Paginación">
-        {lista.page > 1 ? <Link href={enlacePagina(lista.page - 1)} className="underline">Anterior</Link> : <span className="opacity-50">Anterior</span>}
-        <span>
-          Página {lista.page} de {totalPaginas} · {lista.total} producto(s)
-        </span>
-        {lista.page < totalPaginas ? <Link href={enlacePagina(lista.page + 1)} className="underline">Siguiente</Link> : <span className="opacity-50">Siguiente</span>}
-      </nav>
-
-      {esAdmin && <FormularioProducto categorias={categorias} />}
-    </section>
+      <Pagination pagina={lista.page} totalPaginas={totalPaginas} total={lista.total} unidad={["producto", "productos"]} enlace={enlacePagina} />
+    </>
   );
 }
