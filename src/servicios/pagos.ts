@@ -34,6 +34,7 @@ import type { UsuarioAutenticado } from "./auth";
 import { exigirClienteDeCuenta, obtenerSaldo, registrarCredito, type ClienteDeCuenta } from "./cuenta-corriente";
 import { asignarNumero } from "./numeracion";
 import { exigirRol } from "./permisos";
+import { ahora } from "./reloj";
 
 // ---------------------------------------------------------------------------
 // Representación pública (sección 11.5)
@@ -182,6 +183,7 @@ export async function registrarPago(
         observacion: entrada.observacion ?? null,
         usuarioId: usuario.id,
         saldoResultante: deuda - entrada.importe,
+        fecha: ahora(), // reloj del servidor (regla 11); el cliente nunca envía la fecha
       })
       .returning({ id: pagos.id, fecha: pagos.fecha });
 

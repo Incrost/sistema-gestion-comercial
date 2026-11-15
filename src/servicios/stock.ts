@@ -37,6 +37,7 @@ import {
 
 import type { UsuarioAutenticado } from "./auth";
 import { exigirRol, tieneRol } from "./permisos";
+import { ahora } from "./reloj";
 
 // ---------------------------------------------------------------------------
 // Representación pública (sección 11.4)
@@ -220,7 +221,7 @@ export async function moverStock(
 
     // Regla 2 — todo cambio de stock deja un movimiento, en la MISMA
     // transacción: si esta inserción falla, el UPDATE anterior se revierte.
-    // Regla 11 — trazabilidad: usuario y fecha (la pone la base al insertar).
+    // Regla 11 — trazabilidad: usuario y fecha (reloj del servidor, ver reloj.ts).
     const [{ id }] = await t
       .insert(movimientosStock)
       .values({
@@ -232,6 +233,7 @@ export async function moverStock(
         observacion: movimiento.observacion ?? null,
         usuarioId: usuario.id,
         facturaId: movimiento.facturaId ?? null,
+        fecha: ahora(),
       })
       .returning({ id: movimientosStock.id });
 

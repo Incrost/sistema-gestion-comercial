@@ -85,6 +85,7 @@ import type { UsuarioAutenticado } from "./auth";
 import { exigirClienteDeCuenta, obtenerSaldo, registrarCredito, registrarDebito } from "./cuenta-corriente";
 import { asignarNumero, consultarProximoNumero as proximoNumeroDelTalonario } from "./numeracion";
 import { exigirRol } from "./permisos";
+import { ahora } from "./reloj";
 import { moverStock } from "./stock";
 
 // ---------------------------------------------------------------------------
@@ -667,12 +668,14 @@ async function grabarFactura(
   const numero = await asignarNumero(tx, NUMERACION.factura);
 
   // 9. Factura con el comprador congelado (D4) y el vendedor y la fecha (regla 11).
+  // La fecha la da el reloj del servidor (src/servicios/reloj.ts), nunca el cliente.
   // Regla 9: de la tarjeta solo existen columnas para tipo, marca y últimos 4.
   const [factura] = await tx
     .insert(facturas)
     .values({
       puntoVenta,
       numero,
+      fecha: ahora(),
       total,
       formaPago: pago.forma,
       clienteId: comprador.clienteId,
@@ -1030,7 +1033,7 @@ export async function anularFactura(
 
     // c-d. Reglas 5 y 11: estado, motivo, fecha y usuario. El WHERE por
     // estado es una barrera más: nunca se anula dos veces.
-    const fechaAnulacion = new Date();
+    const fechaAnulacion = ahora();
     const marcadas = await tx
       .update(facturas)
       .set({ estado: "anulada", motivoAnulacion: motivo, fechaAnulacion, anuladaPorId: usuario.id })
