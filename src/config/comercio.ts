@@ -8,17 +8,17 @@
  * También define la NUMERACIÓN de comprobantes (regla 4, decisión D3): qué
  * clave de la tabla `secuencias` y qué punto de venta usa cada tipo.
  *
- * ⚠ DATOS PROVISIONALES: los valores marcados con «PROVISORIO» son de
- * ejemplo académico y deben REEMPLAZARSE por los definitivos antes de entregar.
+ * El CUIT y el domicilio son datos académicos ficticios.
  */
 import type { ClaveSecuencia } from "@/db/schema"; // solo el tipo; no carga código del servidor
 
 export const COMERCIO = {
-  // --- Identidad del comercio (PROVISORIO: reemplazar antes de entregar) ---
-  nombreComercial: "Comercio de Prueba", // PROVISORIO
-  razonSocial: "Comercio de Prueba S.R.L.", // PROVISORIO
-  cuit: "30000000000", // PROVISORIO. Solo dígitos; se muestra con formatearDocumento().
-  domicilio: "Calle de Prueba 123, Ciudad de Ejemplo", // PROVISORIO
+  // --- Identidad del comercio ---
+  nombreComercial: "Nexo Comercial",
+  razonSocial: "Nexo Comercial S.R.L.",
+  /** CUIT académico 30-71654321-4. Solo dígitos; se muestra con formatearDocumento(). */
+  cuit: "30716543214",
+  domicilio: "Av. Central 1234, San Miguel de Tucumán",
 
   // --- Facturación ---
   /** Punto de venta de facturas y recibos (regla 4): 0001-00000001. */
@@ -54,5 +54,5 @@ export const NUMERACION = {
 
 export type Numeracion = (typeof NUMERACION)[ClaveSecuencia];
 
-/** Indica que la identidad del comercio todavía tiene datos de ejemplo. */
-export const COMERCIO_CON_DATOS_PROVISORIOS = true;
+/** Indica si la identidad del comercio todavía tiene datos de ejemplo. */
+export const COMERCIO_CON_DATOS_PROVISORIOS = false;

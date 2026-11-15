@@ -116,7 +116,7 @@ No se necesita instalar SQLite: la base local la crea el propio cliente libSQL.
 ## Instalación local
 
 ```bash
-git clone <URL-del-repositorio>
+git clone https://github.com/Incrost/sistema-gestion-comercial.git
 cd sistema-gestion-comercial
 ```
 
@@ -380,6 +380,10 @@ Las pruebas usan una base SQLite temporal y no tocan `local.db`. Cubren, entre o
 
 ## Publicación
 
+### Repositorio
+
+- **URL:** https://github.com/Incrost/sistema-gestion-comercial
+
 ### Aplicación en Vercel
 
 - **URL pública:** _pendiente de publicación_.
@@ -398,9 +402,27 @@ Las pruebas usan una base SQLite temporal y no tocan `local.db`. Cubren, entre o
 
 | Nombre y apellido | Legajo |
 | --- | --- |
-| _A completar_ | _A completar_ |
-| _A completar_ | _A completar_ |
-| _A completar_ | _A completar_ |
+| Carrizo Silva, Yaqueline Ailen | 63326 |
+| Cedrón, Agustina Julieta | 63324 |
+
+El grupo está integrado por dos estudiantes con autorización expresa del profesor.
+
+### Datos del comercio
+
+Facturas y recibos muestran los datos definidos en `src/config/comercio.ts`:
+
+| Dato | Valor |
+| --- | --- |
+| Nombre comercial | Nexo Comercial |
+| Razón social | Nexo Comercial S.R.L. |
+| CUIT | 30-71654321-4 |
+| Domicilio | Av. Central 1234, San Miguel de Tucumán |
+| Punto de venta | 0001 |
+| Zona horaria | America/Argentina/Buenos_Aires |
+| Locale | es-AR |
+| Moneda | ARS |
+
+El CUIT y el domicilio son datos académicos ficticios.
 
 ## Uso de inteligencia artificial
 
@@ -423,9 +445,8 @@ Todo el código fue revisado, probado y organizado por los integrantes en commit
 
 - Funcionalidad completa según los requerimientos RF-V, RF-P, RF-C, RF-U y RF-T, con las 31 rutas REST.
 - Pruebas, análisis estático, verificación de tipos y compilación de producción sin errores.
-- Pendiente: publicación en Vercel y Turso, datos definitivos del comercio, integrantes y aclaración de la decisión C1.
-
-> **Datos del comercio provisionales:** el nombre, la razón social, el CUIT y el domicilio de `src/config/comercio.ts` son valores de ejemplo y están marcados como provisionales hasta su reemplazo.
+- Datos definitivos del comercio, integrantes y repositorio incorporados.
+- Pendiente: publicación en Vercel y Turso, y aclaración de la decisión C1.
 
 ## Licencia y uso académico
 
