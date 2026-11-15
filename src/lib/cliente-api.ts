@@ -19,6 +19,8 @@ export class ErrorDeApi extends Error {
     readonly status: number,
     readonly code: string,
     readonly campos: ErroresCampo = {},
+    /** `error.details` tal como lo envió la API (p. ej. los faltantes de STOCK_INSUFICIENTE). */
+    readonly detalles?: unknown,
   ) {
     super(message);
   }
@@ -50,6 +52,7 @@ export async function llamarApi<T>(url: string, init?: RequestInit): Promise<T> 
       respuesta.status,
       error?.code ?? "ERROR_INTERNO",
       campos,
+      error?.details,
     );
   }
   return cuerpo as T;

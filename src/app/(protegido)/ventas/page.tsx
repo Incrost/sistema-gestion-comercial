@@ -93,7 +93,12 @@ async function Listado({ searchParams }: { searchParams: ParametrosBusqueda }) {
 
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Facturas</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Facturas</h1>
+        <Link href="/ventas/nueva" className="rounded border px-3 py-1 text-sm">
+          Nueva venta
+        </Link>
+      </div>
 
       <Form action="/ventas" className="flex flex-wrap items-end gap-3 text-sm">
         <label className="flex flex-col gap-1">
