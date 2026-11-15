@@ -2,9 +2,13 @@
 
 /**
  * Usuario conectado en la barra superior: nombre y rol siempre visibles y un
- * menú desplegable con «Cerrar sesión» (ocupa poco lugar, también en 360 px).
+ * menú desplegable con «Mi perfil» y «Cerrar sesión» (ocupa poco lugar,
+ * también en 360 px). El menú de Radix se maneja con el teclado: Enter,
+ * Espacio o flechas para abrirlo y recorrerlo, y Escape para cerrarlo.
  */
-import { ChevronDownIcon, LogOutIcon } from "lucide-react";
+import { ChevronDownIcon, LogOutIcon, UserRoundIcon } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { useCerrarSesion } from "@/components/auth/boton-cerrar-sesion";
 import { Button } from "@/components/ui/button";
@@ -17,7 +21,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Rol } from "@/db/schema";
-import { NOMBRES_ROL } from "@/lib/navegacion";
+import { enlaceActivo, NOMBRES_ROL } from "@/lib/navegacion";
+import { cn } from "@/lib/utils";
+
+/** Enlaces de la cuenta: visibles para todos los roles (RF-U5). */
+export const ENLACES_CUENTA = [{ href: "/perfil", texto: "Mi perfil" }] as const;
 
 /** Iniciales para el avatar: «Ana María Pérez» → «AP». */
 export function iniciales(nombre: string): string {
@@ -32,6 +40,7 @@ type Props = { nombre: string; email: string; rol: Rol };
 
 export function MenuUsuario({ nombre, email, rol }: Props) {
   const { cerrando, cerrarSesion } = useCerrarSesion();
+  const activo = enlaceActivo(usePathname(), ENLACES_CUENTA.map((e) => e.href));
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -52,6 +61,18 @@ export function MenuUsuario({ nombre, email, rol }: Props) {
           <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>
           <span className="text-xs font-normal text-muted-foreground">Rol: {NOMBRES_ROL[rol]}</span>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {ENLACES_CUENTA.map((enlace) => {
+          const esActivo = activo === enlace.href;
+          return (
+            <DropdownMenuItem key={enlace.href} asChild className={cn(esActivo && "bg-accent font-medium text-accent-foreground")}>
+              <Link href={enlace.href} aria-current={esActivo ? "page" : undefined}>
+                <UserRoundIcon aria-hidden />
+                {enlace.texto}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" disabled={cerrando} onSelect={() => void cerrarSesion()}>
           <LogOutIcon aria-hidden />
