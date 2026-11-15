@@ -29,7 +29,7 @@
  */
 import "server-only";
 
-import { and, asc, eq, getTableName, gte, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, getTableName, gt, gte, lt, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
 import { clientes, movimientosCuenta, type TipoMovimientoCuenta } from "@/db/schema";
@@ -89,6 +89,32 @@ export async function obtenerSaldo(conexion: Conexion, clienteId: number): Promi
     .where(eq(clientes.id, clienteId))
     .limit(1);
   return fila?.saldo ?? 0;
+}
+
+/**
+ * RF-T1 — resumen de las deudas de cuenta corriente (regla 7), calculado SOLO
+ * desde movimientos_cuenta (no existe columna de saldo):
+ * - `totalAdeudado`: suma de los saldos POSITIVOS (saldo = débitos − créditos);
+ * - `clientesConSaldo`: cantidad de clientes con saldo > 0.
+ * Los saldos cero no cuentan (y por la regla 8 nunca hay negativos).
+ * Una sola consulta: agrupa los movimientos por cliente y filtra con HAVING.
+ */
+export async function resumirDeudas(
+  conexion: Conexion,
+): Promise<{ totalAdeudado: number; clientesConSaldo: number }> {
+  const saldos = conexion
+    .select({ clienteId: movimientosCuenta.clienteId, saldo: sumaConSigno.as("saldo") })
+    .from(movimientosCuenta)
+    .groupBy(movimientosCuenta.clienteId)
+    .having(gt(sumaConSigno, 0))
+    .as("saldos");
+  const [fila] = await conexion
+    .select({
+      totalAdeudado: sql<number>`coalesce(sum(${saldos.saldo}), 0)`.mapWith(Number),
+      clientesConSaldo: count(),
+    })
+    .from(saldos);
+  return { totalAdeudado: fila?.totalAdeudado ?? 0, clientesConSaldo: fila?.clientesConSaldo ?? 0 };
 }
 
 /**

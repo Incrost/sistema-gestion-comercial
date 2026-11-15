@@ -58,6 +58,12 @@ export function estaBajoMinimo(existencia: number, stockMinimo: number): boolean
   return existencia < stockMinimo;
 }
 
+/**
+ * Decisión D2 en SQL: la MISMA comparación estricta que estaBajoMinimo().
+ * La usan el filtro `bajoMinimo` del catálogo y el tablero (RF-T1).
+ */
+export const condicionBajoMinimo: SQL = lt(productos.existencia, productos.stockMinimo);
+
 const columnasProducto = {
   id: productos.id,
   codigo: productos.codigo,
@@ -200,7 +206,7 @@ export async function listarProductos(
   }
   if (categoriaId !== undefined) condiciones.push(eq(productos.categoriaId, categoriaId));
   // Decisión D2: bajo mínimo ⇔ existencia < stockMinimo (estricto).
-  if (bajoMinimo === true) condiciones.push(lt(productos.existencia, productos.stockMinimo));
+  if (bajoMinimo === true) condiciones.push(condicionBajoMinimo);
   if (bajoMinimo === false) {
     condiciones.push(sql`${productos.existencia} >= ${productos.stockMinimo}`);
   }

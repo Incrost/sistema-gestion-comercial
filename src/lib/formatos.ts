@@ -80,3 +80,26 @@ export function formatearNumeroFactura(puntoVenta: number, numero: number): stri
 export function formatearNumeroRecibo(puntoVenta: number, numero: number): string {
   return `R ${formatearNumeracion(puntoVenta, numero)}`;
 }
+
+const NOMBRES_MES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+] as const;
+
+/** Día de calendario "AAAA-MM-DD" como dd/mm (ejes de gráficos): "2026-10-17" → "17/10". */
+export function formatearDiaCorto(dia: string): string {
+  const [, mes, d] = dia.split("-");
+  return `${d}/${mes}`;
+}
+
+/** Día de calendario "AAAA-MM-DD" como dd/mm/aaaa: "2026-10-17" → "17/10/2026". */
+export function formatearDia(dia: string): string {
+  const [anio, mes, d] = dia.split("-");
+  return `${d}/${mes}/${anio}`;
+}
+
+/** Mes de un día de calendario "AAAA-MM-DD": "2026-11-15" → "noviembre de 2026". */
+export function formatearMesAnio(dia: string): string {
+  const [anio, mes] = dia.split("-");
+  return `${NOMBRES_MES[Number(mes) - 1]} de ${anio}`;
+}

@@ -77,3 +77,55 @@ export function inicioDelDiaSiguienteEnArgentina(dia: string): Date {
   const inicio = inicioDelDiaEnArgentina(dia);
   return new Date(inicio.getTime() + 24 * 60 * 60 * 1000);
 }
+
+// ---------------------------------------------------------------------------
+// Aritmética de días de calendario (AAAA-MM-DD)
+// ---------------------------------------------------------------------------
+// Trabajan sobre el TEXTO del día, no sobre instantes: el cálculo se hace con
+// Date.UTC, así que no depende de la zona horaria de la máquina ni del
+// servidor. Para pasar de un día a instantes se usa inicioDelDiaEnArgentina().
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+/** Valida un día "AAAA-MM-DD" y devuelve sus partes numéricas. */
+function partesDelDia(dia: string): { anio: number; mes: number; dia: number } {
+  const coincidencia = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+  if (!coincidencia) throw new RangeError(`El día «${dia}» no tiene el formato AAAA-MM-DD.`);
+  const [anio, mes, d] = coincidencia.slice(1).map(Number);
+  const fecha = new Date(Date.UTC(anio, mes - 1, d));
+  if (fecha.getUTCFullYear() !== anio || fecha.getUTCMonth() !== mes - 1 || fecha.getUTCDate() !== d) {
+    throw new RangeError(`El día «${dia}» no existe.`);
+  }
+  return { anio, mes, dia: d };
+}
+
+/** Date.UTC → "AAAA-MM-DD" (sin zona horaria). */
+function diaDesdeUtc(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Suma (o resta) días de calendario: ("2026-11-01", -1) → "2026-10-31". */
+export function sumarDias(dia: string, cantidad: number): string {
+  const { anio, mes, dia: d } = partesDelDia(dia);
+  return diaDesdeUtc(Date.UTC(anio, mes - 1, d) + cantidad * DIA_MS);
+}
+
+/** Primer día del mes del día indicado: "2026-11-15" → "2026-11-01". */
+export function primerDiaDelMes(dia: string): string {
+  const { anio, mes } = partesDelDia(dia);
+  return diaDesdeUtc(Date.UTC(anio, mes - 1, 1));
+}
+
+/** Primer día del mes siguiente: "2026-12-15" → "2027-01-01". */
+export function primerDiaDelMesSiguiente(dia: string): string {
+  const { anio, mes } = partesDelDia(dia);
+  return diaDesdeUtc(Date.UTC(anio, mes, 1));
+}
+
+/**
+ * Lista de `cantidad` días consecutivos que termina en `ultimo` (inclusive),
+ * del más antiguo al más reciente: ("2026-11-15", 3) → ["2026-11-13", "2026-11-14", "2026-11-15"].
+ */
+export function diasHasta(ultimo: string, cantidad: number): string[] {
+  return Array.from({ length: cantidad }, (_, i) => sumarDias(ultimo, i - (cantidad - 1)));
+}

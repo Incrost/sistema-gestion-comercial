@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatearDia,
+  formatearDiaCorto,
   formatearDocumento,
   formatearFecha,
   formatearFechaHora,
+  formatearMesAnio,
   formatearMoneda,
   formatearNumeroFactura,
   formatearNumeroRecibo,
@@ -69,5 +72,18 @@ describe("fechas en hora de Argentina", () => {
   it("acepta milisegundos y rechaza fechas inválidas", () => {
     expect(formatearFecha(Date.UTC(2026, 0, 1, 12))).toBe("01/01/2026");
     expect(() => formatearFecha("no es una fecha")).toThrow(RangeError);
+  });
+});
+
+describe("días de calendario (tablero)", () => {
+  it("formatea un día AAAA-MM-DD sin conversiones de zona horaria", () => {
+    expect(formatearDiaCorto("2026-10-17")).toBe("17/10");
+    expect(formatearDia("2026-10-17")).toBe("17/10/2026");
+  });
+
+  it("nombra el mes en español", () => {
+    expect(formatearMesAnio("2026-11-15")).toBe("noviembre de 2026");
+    expect(formatearMesAnio("2027-01-01")).toBe("enero de 2027");
+    expect(formatearMesAnio("2026-12-31")).toBe("diciembre de 2026");
   });
 });
