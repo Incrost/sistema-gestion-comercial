@@ -386,17 +386,14 @@ Las pruebas usan una base SQLite temporal y no tocan `local.db`. Cubren, entre o
 
 ### Aplicación en Vercel
 
-- **URL pública:** _pendiente de publicación_.
+- **URL pública:** https://sistema-gestion-comercial.vercel.app/
 - Variables de entorno a cargar en el proyecto de Vercel: `DATABASE_URL`, `DATABASE_AUTH_TOKEN` y `SESSION_SECRET` (un valor aleatorio propio, distinto del de `.env.example`).
 
 ### Base de datos en Turso
-
-- **Base:** _pendiente de creación_.
-- Pasos previstos:
-  1. Crear la base y un token con la CLI de Turso (`turso db create`, `turso db show --url`, `turso db tokens create`).
-  2. En una terminal, definir `DATABASE_URL` y `DATABASE_AUTH_TOKEN` con los valores de Turso.
-  3. Ejecutar `pnpm run db:migrate` para crear las tablas y `pnpm run db:seed` para cargar los datos de prueba.
-- Para comprobar que el sitio publicado usa Turso: el servidor rechaza en Vercel una base `file:`, y los datos creados desde la URL pública se ven en la base de Turso (`turso db shell`).
+- Base remota configurada y operativa.
+- Las migraciones fueron aplicadas correctamente.
+- El seed académico fue ejecutado de forma idempotente.
+- Producción utiliza Turso mediante DATABASE_URL y DATABASE_AUTH_TOKEN.
 
 ## Integrantes
 
