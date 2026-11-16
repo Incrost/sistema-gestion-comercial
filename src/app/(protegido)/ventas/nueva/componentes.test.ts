@@ -23,7 +23,7 @@ import {
 
 import { MensajeBusqueda } from "./estado-busqueda";
 import { FormaPago } from "./forma-pago";
-import { ItemsVenta } from "./items-venta";
+import { ANCHO_MINIMO_TABLA, COLUMNAS_ITEMS, ItemsVenta, MARGEN_BARRA } from "./items-venta";
 import { SelectorCliente } from "./selector-cliente";
 
 const nada = () => {};
@@ -129,6 +129,70 @@ describe("ItemsVenta", () => {
     for (const texto of ["HE-001", "Martillo", 'value="2"', 'max="5"', "$ 12.500,00", "$ 25.000,00", "solicitado 2, disponible 1", "Quitar"]) {
       expect(html).toContain(texto);
     }
+  });
+});
+
+describe("ItemsVenta: distribución de columnas", () => {
+  const LARGA = "Martillo carpintero 500 g con mango de fibra de vidrio antivibración";
+  const r = agregarProducto(borradorInicial(), { id: 1, codigo: "HE-001", descripcion: LARGA, precio: 1_250_000, existencia: 26 }, "1");
+  if (!r.ok) throw new Error(r.mensaje);
+  const html = renderToStaticMarkup(
+    createElement(ItemsVenta, { renglones: calcularRenglones(r.borrador), erroresServidor: {}, total: 1_250_000, onCambiarCantidad: nada, onQuitar: nada }),
+  );
+  /** Pistas de la grilla de escritorio: md:grid-cols-[a_b_c...]. */
+  const pistas = COLUMNAS_ITEMS.match(/^md:grid-cols-\[(.+)\]$/)![1].split("_");
+  const rem = (valor: string) => Number(valor.replace("rem", ""));
+
+  it("la descripción larga se muestra completa, sin truncar", () => {
+    expect(html).toContain(`>${LARGA}<`);
+    expect(html).not.toMatch(/truncate|line-clamp/);
+  });
+
+  it("la descripción es la única columna flexible y tiene un ancho mínimo razonable (nunca minmax(0,1fr))", () => {
+    expect(pistas).toHaveLength(7);
+    expect(pistas.filter((p) => p.includes("fr"))).toEqual([pistas[1]]);
+    const minimo = pistas[1].match(/^minmax\(([\d.]+)rem,1fr\)$/);
+    expect(minimo).not.toBeNull();
+    expect(Number(minimo![1])).toBeGreaterThanOrEqual(7);
+    expect(COLUMNAS_ITEMS).not.toContain("minmax(0,");
+  });
+
+  it("los encabezados tienen anchos coherentes: código compacto, cantidad para el input e importes legibles, sin cortes de línea", () => {
+    const [codigo, , cantidad, precio, subtotal, existencia, acciones] = pistas.map((p) => (p.endsWith("rem") ? rem(p) : NaN));
+    expect(codigo).toBeGreaterThanOrEqual(4);
+    expect(codigo).toBeLessThanOrEqual(6);
+    expect(cantidad).toBeGreaterThanOrEqual(4.5);
+    expect(precio).toBeGreaterThanOrEqual(6);
+    expect(subtotal).toBeGreaterThanOrEqual(6.5);
+    expect(existencia).toBeGreaterThanOrEqual(5);
+    expect(acciones).toBeGreaterThanOrEqual(2);
+    for (const encabezado of ["Código", "Descripción", "Cantidad", "Precio unit.", "Subtotal", "Existencia"]) {
+      expect(html).toContain(`role="columnheader"${encabezado === "Código" || encabezado === "Descripción" || encabezado === "Cantidad" ? "" : ' class="text-right"'}>${encabezado}<`);
+    }
+    expect(html).toMatch(/role="row" class="[^"]*whitespace-nowrap[^"]*uppercase/);
+  });
+
+  it("el ancho mínimo de la tabla es la suma de columnas, espacios y relleno, y el marco se desplaza localmente", () => {
+    const columnas = pistas.reduce((s, p) => s + (p.endsWith("rem") ? rem(p) : Number(p.match(/minmax\(([\d.]+)rem/)![1])), 0);
+    const espacios = 6 * 0.5; // md:gap-x-2
+    const relleno = 2 * 0.75; // px-3
+    expect(ANCHO_MINIMO_TABLA).toBe(`md:min-w-[${columnas + espacios + relleno}rem]`);
+    expect(html).toMatch(/data-slot="marco-items" class="[^"]*min-w-0[^"]*md:overflow-x-auto/);
+    expect(html).toMatch(new RegExp(`role="table"[^>]*class="[^"]*${ANCHO_MINIMO_TABLA.replace(/[[\].]/g, "\\$&")}`));
+    expect(html).toContain("md:gap-x-2");
+  });
+
+  it("en móvil sigue usando tarjetas: sin fila de encabezados y con etiquetas en cada dato", () => {
+    expect(html).toMatch(/role="rowgroup" class="hidden md:block"/);
+    expect(html).toContain("grid grid-cols-[minmax(0,1fr)_auto]");
+    expect(html).toContain('<span class="md:hidden">Precio unit.: </span>');
+    expect(html).toContain('<span class="md:hidden">Existencia: </span>');
+    expect(html).toContain("order-3 col-span-2 min-w-0");
+  });
+
+  it("los renglones y sus controles quedan por encima de la barra inferior al enfocarlos", () => {
+    expect(MARGEN_BARRA).toBe("scroll-mb-56 min-[90rem]:scroll-mb-0");
+    expect(html.split(MARGEN_BARRA).length - 1).toBe(3); // renglón, cantidad y quitar
   });
 });
 

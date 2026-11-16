@@ -14,6 +14,7 @@ import { useState, type ComponentProps, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 import { FormField, propsCampo } from "./form-field";
 
@@ -27,10 +28,20 @@ type Props = Omit<ComponentProps<"input">, "id" | "type" | "value" | "onChange" 
   ayuda?: ReactNode;
 };
 
-export function PasswordField({ id, etiqueta, valor, onCambiar, autoComplete, error, ayuda, ref, ...props }: Props) {
+/**
+ * Atributos que dependen de si la contraseña está visible: el tipo del campo
+ * y el nombre accesible y el estado del botón. Función pura (se prueba sin
+ * navegador); el componente la usa en cada renderizado.
+ */
+export function visibilidadContrasena(visible: boolean, etiqueta: string) {
+  const accion = `${visible ? "Ocultar" : "Mostrar"} ${etiqueta.toLowerCase()}`;
+  return { type: visible ? "text" : "password", accion, pressed: visible } as const;
+}
+
+export function PasswordField({ id, etiqueta, valor, onCambiar, autoComplete, error, ayuda, ref, className, ...props }: Props) {
   // Para volver a ocultarla, el formulario puede montar el campo de nuevo (key).
   const [visible, setVisible] = useState(false);
-  const accion = `${visible ? "Ocultar" : "Mostrar"} ${etiqueta.toLowerCase()}`;
+  const { type, accion, pressed } = visibilidadContrasena(visible, etiqueta);
 
   return (
     <FormField id={id} etiqueta={etiqueta} error={error} ayuda={ayuda}>
@@ -38,14 +49,14 @@ export function PasswordField({ id, etiqueta, valor, onCambiar, autoComplete, er
         <Input
           ref={ref}
           {...propsCampo(id, error, Boolean(ayuda))}
-          type={visible ? "text" : "password"}
+          type={type}
           value={valor}
           onChange={(e) => onCambiar(e.target.value)}
           autoComplete={autoComplete}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          className="pr-11"
+          className={cn("pr-11", className)}
           {...props}
         />
         <Button
@@ -55,7 +66,7 @@ export function PasswordField({ id, etiqueta, valor, onCambiar, autoComplete, er
           className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
           aria-label={accion}
           title={accion}
-          aria-pressed={visible}
+          aria-pressed={pressed}
           aria-controls={id}
           onClick={() => setVisible((v) => !v)}
         >

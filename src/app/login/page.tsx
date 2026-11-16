@@ -5,8 +5,13 @@
  * el usuario ya tiene una sesión válida (comprobada contra la base), se lo
  * envía al inicio. Si la cookie existe pero no es válida, se muestra el
  * formulario: así nunca hay ciclo de redirecciones.
+ *
+ * Escritorio (desde 1024 px): dos sectores, presentación a la izquierda y
+ * formulario a la derecha. Móvil: marca centrada, tarjeta y nota de acceso,
+ * centrados en la altura visible (svh, descontando las barras del navegador)
+ * con un poco más de aire abajo que arriba para que el conjunto no quede bajo.
  */
-import { ChartColumnIcon, PackageIcon, ReceiptTextIcon, WalletIcon } from "lucide-react";
+import { ChartColumnIcon, LockKeyholeIcon, PackageIcon, ReceiptTextIcon, StoreIcon, WalletIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -58,11 +63,20 @@ export default function PaginaLogin({ searchParams }: PageProps<"/login">) {
         </Texto>
       </Pila>
 
-      <Fila as="section" justificar="center" className="px-4 py-10 sm:px-8">
+      <Fila as="section" justificar="center" className="relative isolate px-4 pt-6 pb-10 sm:px-8 lg:py-10">
+        {/* Fondo suave solo en móvil: un degradado del color de la marca, sin imágenes. */}
+        <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-72 bg-linear-to-b from-primary/12 to-transparent lg:hidden" />
         <Pila gap="lg" className="w-full max-w-sm">
-          <Pila gap="xs" className="lg:hidden">
-            <Marca enlace={false} className="[&>span:last-child]:text-base" />
-            <Texto tono="suave">{APLICACION.descripcion}</Texto>
+          <Pila gap="sm" className="items-center text-center lg:hidden">
+            <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-suave">
+              <StoreIcon aria-hidden className="size-6" />
+            </span>
+            <Titulo nivel={1} className="text-xl sm:text-xl">
+              {APLICACION.nombre}
+            </Titulo>
+            <Texto tono="suave" className="max-w-xs">
+              {APLICACION.descripcion}
+            </Texto>
           </Pila>
           <Card className="shadow-suave">
             <CardHeader>
@@ -75,6 +89,10 @@ export default function PaginaLogin({ searchParams }: PageProps<"/login">) {
               </Suspense>
             </CardContent>
           </Card>
+          <Texto tamanio="xs" tono="suave" className="flex items-center justify-center gap-1.5 lg:hidden">
+            <LockKeyholeIcon aria-hidden className="size-3.5 shrink-0" />
+            Acceso exclusivo para personal autorizado.
+          </Texto>
         </Pila>
       </Fila>
     </main>

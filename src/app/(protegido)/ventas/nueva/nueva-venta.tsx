@@ -21,11 +21,16 @@
  * Avisos: los de la venta en curso pertenecen al grupo GRUPO_AVISOS_VENTA y
  * se limpian al descartarla o emitirla; el de «Se agregó…» se cierra además
  * al quitar un ítem. Los errores de validación quedan junto a cada campo.
+ *
+ * Con Cache Components la pantalla no se desmonta al ir al comprobante: queda
+ * oculta con <Activity>. El estado de la pantalla vive en estado-venta.ts y
+ * un único reinicio deja la venta limpia al emitir, al descartar y al
+ * ocultarse después de una emisión (una venta a medio completar se conserva).
  */
 import { CheckIcon, ClipboardListIcon, Trash2Icon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useReducer, useRef } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/layout/page-header";
@@ -36,17 +41,14 @@ import { Kbd } from "@/components/ui/kbd";
 import { avisos } from "@/lib/avisos";
 import {
   ATAJOS,
-  actualizarExistencias,
   actualizarPago,
   agregarProducto,
   aClienteVenta,
-  borradorInicial,
   calcularRenglones,
   cambiarCantidad,
   cambiarFormaPago,
   construirCuerpoEmision,
   crearEnvioUnico,
-  descartarVenta,
   enviarVenta,
   interpretarErrorEmision,
   MENSAJE_DESCARTE,
@@ -55,16 +57,16 @@ import {
   resolverAtajo,
   rutaComprobante,
   seleccionarCliente,
-  SIN_ERRORES,
   tieneDatos,
   type BorradorVenta,
-  type ErroresVenta,
 } from "@/lib/borrador-venta";
 import { formatearMoneda } from "@/lib/formatos";
+import { cn } from "@/lib/utils";
 import { ETIQUETAS_FORMA_PAGO, NOMBRE_CONSUMIDOR_FINAL } from "@/lib/validacion-facturas";
 
 import { AltaRapidaCliente } from "./alta-rapida-cliente";
 import { AVISO_AGREGADO, BuscadorProductos, GRUPO_AVISOS_VENTA } from "./buscador-productos";
+import { reducirVenta, ventaInicial } from "./estado-venta";
 import { FormaPago } from "./forma-pago";
 import { ItemsVenta } from "./items-venta";
 import { SeccionVenta } from "./seccion-venta";
@@ -73,15 +75,17 @@ import { SelectorCliente } from "./selector-cliente";
 /** Id del aviso sobre el comprador: cada cambio reemplaza al anterior. */
 const AVISO_CLIENTE = "venta-cliente";
 
+const crearEnvioVenta = () => crearEnvioUnico(enviarVenta);
+type EnvioVenta = ReturnType<typeof crearEnvioVenta>;
+
 export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) {
   const router = useRouter();
-  const [borrador, setBorrador] = useState<BorradorVenta>(borradorInicial);
-  const [errores, setErrores] = useState<ErroresVenta>(SIN_ERRORES);
-  const [enviando, setEnviando] = useState(false);
-  const [sesionVencida, setSesionVencida] = useState(false);
-  const [altaAbierta, setAltaAbierta] = useState(false);
-  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
-  const [envio] = useState(() => crearEnvioUnico(enviarVenta));
+  const [estado, despachar] = useReducer(reducirVenta, undefined, () => ventaInicial());
+  const { borrador, errores, enviando, sesionVencida, altaAbierta, confirmandoDescarte, generacion } = estado;
+  /** Envío único del borrador vigente: tras una emisión queda bloqueado; un borrador nuevo tiene uno nuevo. */
+  const envioRef = useRef<{ generacion: number; envio: EnvioVenta } | null>(null);
+  /** La pantalla está visible (false mientras <Activity> la oculta). */
+  const visible = useRef(false);
 
   const productoRef = useRef<HTMLInputElement>(null);
   const clienteRef = useRef<HTMLInputElement>(null);
@@ -94,54 +98,64 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
   // Al salir de la pantalla, los avisos de la venta ya no tienen contexto.
   useEffect(() => () => avisos.limpiarGrupo(GRUPO_AVISOS_VENTA), []);
 
+  // Al ocultarse (Activity) o desmontarse: si hubo una emisión, la venta se
+  // reinicia (al volver aparece limpia); una venta a medio completar se conserva.
+  useLayoutEffect(() => {
+    visible.current = true;
+    return () => {
+      visible.current = false;
+      despachar({ tipo: "ocultar" });
+    };
+  }, []);
+
+  function envioVigente() {
+    if (envioRef.current?.generacion !== generacion) envioRef.current = { generacion, envio: crearEnvioVenta() };
+    return envioRef.current.envio;
+  }
+
   /** Aplica un cambio al borrador; los errores del último intento dejan de valer. */
   function actualizar(cambio: (b: BorradorVenta) => BorradorVenta) {
-    if (enviando) return;
-    setBorrador(cambio);
-    setErrores(SIN_ERRORES);
+    despachar({ tipo: "actualizar", cambio });
   }
 
   async function confirmar() {
-    if (envio.ocupado) return; // confirmación doble
+    const envio = envioVigente();
+    if (enviando || envio.ocupado) return; // confirmación doble
     const preparado = construirCuerpoEmision(borrador);
     if (!preparado.ok) {
-      setErrores(preparado.errores);
+      despachar({ tipo: "validacion", errores: preparado.errores });
       return;
     }
-    setErrores(SIN_ERRORES);
-    setEnviando(true);
+    const generacionEnvio = generacion;
+    despachar({ tipo: "enviar" });
 
     const resultado = await envio.ejecutar(preparado.cuerpo);
     if (resultado.estado === "ignorado") return;
     if (resultado.estado === "ok") {
-      // El envío queda bloqueado: la venta ya no puede reenviarse.
-      setBorrador(borradorInicial());
+      // Venta limpia de inmediato (un borrador vacío no puede confirmarse) y
+      // envío de este borrador bloqueado: la factura no puede reenviarse.
+      despachar({ tipo: "emitida", generacion: generacionEnvio });
       avisos.limpiarGrupo(GRUPO_AVISOS_VENTA);
       avisos.exito(`Factura ${resultado.resultado.numeroFormateado} emitida.`, { id: "venta-emitida" });
-      router.replace(rutaComprobante(resultado.resultado.id));
+      // Si la persona ya salió de la pantalla mientras se emitía, no se la saca de donde está.
+      if (visible.current) router.replace(rutaComprobante(resultado.resultado.id));
       return;
     }
     // Error: la venta se conserva para corregirla (los errores quedan junto a cada campo).
-    const interpretado = interpretarErrorEmision(resultado.error, borrador);
-    if (interpretado.faltantes.length > 0) setBorrador((b) => actualizarExistencias(b, interpretado.faltantes));
-    setErrores(interpretado);
-    setSesionVencida(interpretado.sesionVencida);
-    setEnviando(false);
+    despachar({ tipo: "fallo", generacion: generacionEnvio, error: interpretarErrorEmision(resultado.error, borrador) });
   }
 
   /** «Descartar venta»: si hay datos, pide confirmación con un diálogo. */
   function pedirDescarte() {
     if (enviando) return;
-    if (tieneDatos(borrador)) setConfirmandoDescarte(true);
+    if (tieneDatos(borrador)) despachar({ tipo: "confirmarDescarte", abierto: true });
     else descartar();
   }
 
   function descartar() {
-    // La confirmación ya se pidió en el diálogo: descartarVenta() solo reinicia.
-    const nuevo = descartarVenta(borrador, () => true);
-    if (!nuevo) return;
-    setBorrador(nuevo);
-    setErrores(SIN_ERRORES);
+    // La confirmación ya se pidió en el diálogo: solo se reinicia.
+    if (enviando) return;
+    despachar({ tipo: "descartar" });
     avisos.limpiarGrupo(GRUPO_AVISOS_VENTA);
     avisos.info("Venta descartada.", { id: "venta-descartada", grupo: GRUPO_AVISOS_VENTA });
   }
@@ -217,9 +231,10 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
         </span>
       </p>
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,24rem)] lg:items-start">
+      <div className="grid min-w-0 gap-4 min-[90rem]:grid-cols-[minmax(0,1fr)_22rem] min-[90rem]:items-start">
         <div className="flex min-w-0 flex-col gap-4">
           <SelectorCliente
+            key={generacion}
             cliente={borrador.cliente}
             busquedaRef={clienteRef}
             error={errores.campos.clienteId}
@@ -243,11 +258,12 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
                 grupo: GRUPO_AVISOS_VENTA,
               });
             }}
-            onAltaRapida={() => setAltaAbierta(true)}
+            onAltaRapida={() => despachar({ tipo: "alta", abierta: true })}
           />
 
           <SeccionVenta id="titulo-items" numero={2} titulo="Ítems" atajo="F2">
             <BuscadorProductos
+              key={generacion}
               busquedaRef={productoRef}
               onAgregar={(producto, cantidad) => {
                 if (enviando) return "Espere a que termine el envío.";
@@ -272,7 +288,7 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
           </SeccionVenta>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20">
+        <div className="flex min-w-0 flex-col gap-4 min-[90rem]:sticky min-[90rem]:top-20">
           <SeccionVenta id="titulo-pago" numero={3} titulo="Forma de pago y confirmación" atajo="F8">
             <FormaPago
               pago={borrador.pago}
@@ -297,8 +313,8 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
               </Alert>
             )}
 
-            {/* Resumen y acciones (desde 1024 px; en pantallas chicas, barra fija inferior). */}
-            <div className="hidden flex-col gap-3 border-t pt-4 lg:flex">
+            {/* Resumen y acciones (desde 1440 px, con la forma de pago al costado; en pantallas más chicas, barra fija inferior). */}
+            <div className="hidden flex-col gap-3 border-t pt-4 min-[90rem]:flex">
               <Resumen total={total} cantidadItems={cantidadItems} comprador={borrador.cliente?.nombre ?? NOMBRE_CONSUMIDOR_FINAL} forma={ETIQUETAS_FORMA_PAGO[borrador.pago.forma]} />
               <div className="flex flex-col gap-2">{botones}</div>
             </div>
@@ -306,8 +322,8 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
         </div>
       </div>
 
-      {/* Barra inferior en pantallas chicas: el total y las acciones principales siempre visibles. */}
-      <Card className="sticky bottom-2 z-20 gap-0 py-3 shadow-lg lg:hidden print:hidden">
+      {/* Barra inferior hasta 1440 px (forma de pago debajo de los ítems): el total y las acciones principales siempre visibles. */}
+      <Card className="sticky bottom-2 z-20 gap-0 py-3 shadow-lg min-[90rem]:hidden print:hidden">
         <CardContent className="flex flex-col gap-3">
           <Resumen total={total} cantidadItems={cantidadItems} compacto />
           <div className="flex flex-wrap gap-2 [&>button]:min-w-max [&>button:first-child]:flex-1">{botones}</div>
@@ -315,12 +331,13 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
       </Card>
 
       <AltaRapidaCliente
+        key={generacion}
         abierto={altaAbierta}
-        onCerrar={() => setAltaAbierta(false)}
+        onCerrar={() => despachar({ tipo: "alta", abierta: false })}
         onFocoAlCerrar={() => clienteRef.current?.focus()}
         onCreado={(cliente) => {
           actualizar((b) => seleccionarCliente(b, aClienteVenta(cliente)));
-          setAltaAbierta(false);
+          despachar({ tipo: "alta", abierta: false });
           avisos.exito(`Cliente ${cliente.nombre} creado y seleccionado. La venta en curso se conservó.`, {
             id: AVISO_CLIENTE,
             grupo: GRUPO_AVISOS_VENTA,
@@ -330,7 +347,7 @@ export function NuevaVenta({ proximoNumero }: { proximoNumero: string | null }) 
 
       <ConfirmDialog
         abierto={confirmandoDescarte}
-        onAbiertoCambia={setConfirmandoDescarte}
+        onAbiertoCambia={(abierto) => despachar({ tipo: "confirmarDescarte", abierto })}
         titulo="¿Descartar la venta en curso?"
         descripcion={MENSAJE_DESCARTE.replace(/^¿Desea descartar la venta en curso\? /, "")}
         textoConfirmar="Descartar venta"
@@ -368,11 +385,11 @@ function Resumen({
           <dd className="text-right tabular-nums">{cantidadItems}</dd>
         </dl>
       )}
-      <div className="flex items-baseline justify-between gap-3 rounded-lg bg-primary px-4 py-3 text-primary-foreground" aria-live="polite">
-        <span className="text-sm">
+      <div className={cn("flex items-center justify-between gap-3 rounded-lg bg-primary px-4 text-primary-foreground", compacto ? "py-2" : "py-3")} aria-live="polite">
+        <span className="min-w-0 text-sm">
           Total estimado{compacto && <span className="opacity-80"> · {items}</span>}
         </span>
-        <span className="text-2xl font-semibold tracking-tight tabular-nums">{formatearMoneda(total)}</span>
+        <span className={cn("font-semibold tracking-tight whitespace-nowrap tabular-nums", compacto ? "text-xl" : "text-2xl")}>{formatearMoneda(total)}</span>
       </div>
     </div>
   );

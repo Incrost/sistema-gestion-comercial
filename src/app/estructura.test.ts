@@ -112,6 +112,14 @@ describe("Nueva venta", () => {
     expect(h).toContain('data-variant="outline"');
   });
 
+  it("la forma de pago va al costado desde 1440 px y la barra inferior cubre exactamente los anchos menores", () => {
+    expect(h).toContain("min-[90rem]:grid-cols-[minmax(0,1fr)_22rem]");
+    // Resumen lateral visible solo con dos columnas; barra inferior solo sin ellas.
+    expect(h).toMatch(/class="hidden flex-col gap-3 border-t pt-4 min-\[90rem\]:flex"/);
+    expect(h).toMatch(/class="[^"]*sticky bottom-2[^"]*min-\[90rem\]:hidden/);
+    expect(leer("(protegido)", "ventas", "nueva", "nueva-venta.tsx")).not.toMatch(/\blg:(grid-cols|hidden|flex|sticky)/);
+  });
+
   it("el número de factura es informativo", () => {
     expect(h).toContain("0001-00000051");
     expect(h).toContain("el número se asigna al confirmar");

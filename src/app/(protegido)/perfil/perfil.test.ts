@@ -307,6 +307,11 @@ describe("menú del usuario", () => {
     expect(leer("lib", "navegacion.ts")).not.toContain("/perfil");
   });
 
+  it("«Cerrando sesión…» no sobrevive a la ruta oculta por <Activity> (Cache Components)", () => {
+    const hook = leer("components", "auth", "boton-cerrar-sesion.tsx");
+    expect(hook).toMatch(/useLayoutEffect\(\(\) => \(\) => setCerrando\(false\), \[\]\)/);
+  });
+
   it("«Cerrar sesión» sigue en el menú y llama a POST /api/auth/logout antes de volver al login", async () => {
     expect(leer("components", "navegacion", "menu-usuario.tsx")).toContain("onSelect={() => void cerrarSesion()}");
     const fetchFalso = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
