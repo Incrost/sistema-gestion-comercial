@@ -3,8 +3,7 @@
  *
  * No conoce HTTP, cookies ni componentes: recibe datos sin validar (y, cuando
  * corresponde, el usuario autenticado) y devuelve datos con la forma pública.
- * Lo usan los Route Handlers de /api/auth, el módulo de sesión y, más
- * adelante, las Server Actions.
+ * Lo usan los Route Handlers de /api/auth y el módulo de sesión.
  *
  * Orden de cada función: validar entrada → recuperar al usuario → verificar
  * sesión o permiso → aplicar la regla → devolver la representación pública.

@@ -104,11 +104,8 @@ const id = () => integer("id").primaryKey({ autoIncrement: true });
 const booleano = (nombre: string) => integer(nombre, { mode: "boolean" });
 
 /**
- * Nombre de la columna SIN calificar con la tabla, para usar dentro de CHECK.
- * Si se interpolara la columna directamente, drizzle-kit escribiría
- * "tabla"."columna", y una migración futura que recree la tabla
- * (drizzle-kit usa una tabla temporal "__new_tabla") fallaría con
- * "no such column".
+ * Columna SIN calificar con la tabla, para usar dentro de CHECK: con
+ * "tabla"."columna", las migraciones que recrean la tabla fallarían.
  */
 function c(columna: AnySQLiteColumn): SQL {
   return sql`${sql.identifier(columna.name)}`;
@@ -144,7 +141,7 @@ export const usuarios = sqliteTable(
     // Único. El servicio lo guarda normalizado (sin espacios, en minúsculas).
     email: text("email").notNull(),
     nombre: text("nombre").notNull(),
-    // Hash bcrypt/argon2; la contraseña en claro nunca se guarda.
+    // Hash bcrypt (bcryptjs); la contraseña en claro nunca se guarda.
     passwordHash: text("password_hash").notNull(),
     rol: text("rol", { enum: ROLES }).notNull(),
     // Un usuario desactivado no puede iniciar sesión (RF-U4).

@@ -7,7 +7,7 @@
  * 422 VALIDACION si `desde` es posterior a `hasta`.
  *
  * Solo lectura: no hay ruta para crear movimientos de cuenta (los graban los
- * servicios de pagos y, más adelante, de facturas).
+ * servicios de pagos y de facturas).
  * Solo adapta HTTP: las reglas están en src/servicios/cuenta-corriente.ts.
  */
 import { responderJson, rutaProtegida } from "@/lib/http/ruta";

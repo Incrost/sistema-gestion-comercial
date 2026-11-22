@@ -1,13 +1,7 @@
 /**
- * Servicio de stock (RF-P4, RF-P5, RF-P6; reglas 1, 2 y 11; sección 10.2).
- *
- * moverStock() es la ÚNICA función del sistema que modifica
- * `productos.existencia`. Ingresos, egresos, el stock inicial de un producto
- * nuevo y, más adelante, las ventas y anulaciones de facturas la llaman;
- * ningún otro servicio actualiza la existencia por su cuenta.
- *
- * Orden de cada función (sección 10.2): validar → verificar el rol → aplicar
- * las reglas → acceder a la base → devolver la forma pública.
+ * Servicio de stock (RF-P4, RF-P5, RF-P6; reglas 1, 2 y 11). moverStock() es la
+ * ÚNICA función que modifica `productos.existencia`: la llaman ingresos, egresos,
+ * stock inicial, ventas y anulaciones.
  */
 import "server-only";
 
@@ -139,10 +133,8 @@ const ordenDescendente = [desc(movimientosStock.fecha), desc(movimientosStock.id
 // ---------------------------------------------------------------------------
 
 /**
- * Quién puede originar cada tipo de movimiento (sección 3):
- * - ingreso y egreso manuales: solo admin (RF-P4, RF-P5);
- * - venta: ambos roles (la llamará el servicio de facturas, RF-V6);
- * - anulación: solo admin (RF-V9).
+ * Quién origina cada movimiento (sección 3): ingreso y egreso, solo admin (RF-P4,
+ * RF-P5); venta, ambos roles (RF-V6); anulación, solo admin (RF-V9).
  */
 const ROLES_POR_TIPO: Record<TipoMovimientoStock, Rol[]> = {
   ingreso: ["admin"],
@@ -157,19 +149,9 @@ function restaExistencia(tipo: TipoMovimientoStock): boolean {
 }
 
 /**
- * Única vía para modificar `productos.existencia` (sección 10.2).
- *
- * Recibe el usuario autenticado y datos SIN validar:
- * `{ productoId, tipo, cantidad (> 0), motivo, observacion?, facturaId? }`.
- *
- * - Si se pasa `tx`, trabaja dentro de esa transacción (p. ej. el alta de un
- *   producto con stock inicial o, más adelante, la confirmación de una
- *   factura): si la operación mayor falla, este movimiento también se revierte.
- * - Si no, abre su propia transacción con enTransaccion().
- *
- * Devuelve el movimiento grabado, con la existencia resultante.
- * Errores: 422 VALIDACION, 403 SIN_PERMISO, 404 NO_ENCONTRADO y
- * 409 STOCK_INSUFICIENTE (con `details: [{ productoId, solicitado, disponible }]`).
+ * Única vía para modificar `productos.existencia` (sección 10.2; reglas 1 y 2).
+ * Con `tx` trabaja dentro de la operación mayor (alta, venta, anulación); si no,
+ * abre su propia transacción. Sin stock suficiente → 409 STOCK_INSUFICIENTE.
  */
 export async function moverStock(
   usuario: UsuarioAutenticado,

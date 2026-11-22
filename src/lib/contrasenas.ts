@@ -1,16 +1,7 @@
 /**
- * Hash y verificación de contraseñas (RF-U5, sección 11.3).
- *
- * Algoritmo: bcrypt, mediante `bcryptjs` (JavaScript puro). Se eligió en lugar
- * de `bcrypt` o `argon2` porque esos paquetes compilan módulos nativos, que
- * suelen fallar en Windows o en Vercel; `bcryptjs` funciona igual en todos lados.
- *
- * - La contraseña en claro NUNCA se guarda ni se registra en el log: solo se
- *   guarda el hash, que ya incluye la sal aleatoria y el costo.
- * - bcrypt solo considera los primeros 72 BYTES; por eso esquemaContrasena
- *   (src/lib/validacion.ts) limita la contraseña a 72 caracteres.
- *
- * Solo servidor.
+ * Hash de contraseñas con bcrypt (`bcryptjs`, sin módulos nativos) (RF-U5). Solo
+ * se guarda el hash con sal; la contraseña en claro nunca se guarda ni se loguea.
+ * bcrypt usa hasta 72 bytes: por eso el máximo de 72 en esquemaContrasena. Solo servidor.
  */
 import "server-only";
 

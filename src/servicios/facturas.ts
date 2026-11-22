@@ -1,48 +1,7 @@
 /**
- * Servicio de facturación (sección 11.6):
- * - emisión de facturas (RF-V1 a RF-V6; reglas 1, 2, 3, 4, 6, 7, 9, 10 y 11);
- * - consulta de una factura para el comprobante (RF-V7; reglas 3 y 11);
- * - listado con filtros, búsqueda y paginado (RF-V8);
- * - anulación (RF-V9; reglas 2, 5, 7 y 11; decisión temporal C1).
- *
- * No conoce HTTP ni cookies: lo usan los Route Handlers de /api/facturas y lo
- * usarán la pantalla de Nueva venta y el script de datos iniciales.
- *
- * Emitir una factura es UNA transacción (RF-V6, sección 10.2): número,
- * factura, renglones, descuento de stock con sus movimientos y débito en la
- * cuenta corriente se graban todos o ninguno.
- *
- * Orden dentro de la transacción (sección 11.6):
- *   1. validar el cuerpo (esquemaEmisionFactura);
- *   2. productos existentes y activos;
- *   3. cliente existente y activo (si lo hay);
- *   4. cuenta corriente habilitada (si corresponde);
- *   5. existencias suficientes (todos los faltantes juntos);
- *   6. precios actuales → subtotales y total, en enteros exactos;
- *   7. monto recibido o límite de crédito;
- *   8. número correlativo;
- *   9-10. factura y renglones con los datos congelados;
- *   11. moverStock() por renglón (un movimiento de venta por renglón);
- *   12. registrarDebito() si es a cuenta corriente;
- *   13. representación pública.
- *
- * Los pasos 2 a 7 se ejecutan dos veces: antes de abrir la transacción, para
- * responder rápido sin tomar el bloqueo de escritura, y otra vez DENTRO de
- * ella, que es el control que vale. La transacción abre con BEGIN IMMEDIATE
- * y las escrituras se encolan (src/db/transaccion.ts): si dos vendedores
- * venden la última unidad a la vez, la segunda venta empieza cuando la
- * primera ya confirmó, ve la existencia en 0 y responde 409
- * STOCK_INSUFICIENTE sin consumir número. Además, el UPDATE condicional de
- * moverStock() (`WHERE existencia >= ?`) sigue siendo la barrera definitiva.
- *
- * Anular también es UNA transacción (RF-V9, regla 5): estado y datos de
- * anulación, reingreso de stock (un movimiento de anulación por renglón) y,
- * si fue a cuenta corriente, el crédito por el total. Ver anularFactura().
- *
- * Este módulo NUNCA modifica `productos.existencia` ni escribe
- * movimientos_cuenta por su cuenta: delega en moverStock(), registrarDebito()
- * y registrarCredito().
- *
+ * Facturación: emisión (RF-V1 a RF-V6), comprobante (RF-V7), listado (RF-V8) y
+ * anulación (RF-V9, decisión temporal C1). Emitir y anular son UNA transacción.
+ * Stock y cuenta solo vía moverStock(), registrarDebito() y registrarCredito().
  * Solo servidor.
  */
 import "server-only";
@@ -912,22 +871,9 @@ export async function obtenerFactura(usuario: UsuarioAutenticado, parametros: un
 // ---------------------------------------------------------------------------
 
 /**
- * DECISIÓN TEMPORAL C1 (pendiente de consulta al profesor).
- *
- * Contradicción: RF-V9 pide registrar un crédito por el TOTAL al anular una
- * factura a cuenta corriente, pero la regla 8 prohíbe los saldos a favor. Si
- * el cliente ya pagó (total o parcialmente), ese crédito dejaría el saldo
- * negativo.
- *
- * Solución conservadora adoptada: si el saldo actual es MENOR que el total de
- * la factura, la anulación se RECHAZA con 422 VALIDACION (sin código nuevo),
- * con `details: { saldoActual, totalFactura }`, y no se modifica nada. No se
- * anulan ni devuelven pagos (fuera del alcance actual).
- *
- * Para cambiar el criterio cuando el profesor lo aclare (p. ej. permitir el
- * saldo a favor o acreditar solo hasta el saldo), basta modificar ESTA
- * función (y, si se permitiera el saldo a favor, la regla 8 de
- * registrarMovimientoCuenta()).
+ * DECISIÓN TEMPORAL C1 (pendiente de consulta al profesor): RF-V9 pide acreditar
+ * el total, pero la regla 8 prohíbe saldos a favor. Si saldo < total → 422
+ * VALIDACION y no se modifica nada. Para cambiar el criterio, modificar ESTA función.
  */
 export function exigirAnulacionSinSaldoAFavor(saldoActual: number, totalFactura: number): void {
   if (saldoActual < totalFactura) {
@@ -990,27 +936,9 @@ async function verificarAnulable(conexion: Conexion, id: number): Promise<Factur
 }
 
 /**
- * RF-V9: anula una factura. SOLO el administrador (sección 3).
- *
- * Recibe el usuario autenticado, los parámetros de la ruta `{ id }` y el
- * cuerpo SIN validar `{ motivo }`. Regla 5: la factura nunca se edita ni se
- * borra; solo cambia a «anulada» y queda visible.
- *
- * En UNA transacción (todo o nada):
- *   a. vuelve a leer la factura con el bloqueo de escritura tomado;
- *   b. verifica que siga emitida (y la decisión C1 si es a cuenta);
- *   c-d. la marca anulada con motivo, fecha y usuario (regla 11), con un
- *        UPDATE condicional `WHERE estado = 'emitida'`;
- *   e-f. reingresa cada renglón con moverStock() (regla 2): un movimiento de
- *        tipo «anulacion» por renglón, cantidad positiva, existencia
- *        resultante, usuario, fecha y factura;
- *   g. si fue a cuenta corriente, un crédito por el total con
- *      registrarCredito() (regla 7), vinculado con la factura;
- *   h. devuelve la factura actualizada (misma forma que GET /api/facturas/{id}).
- *
- * Contado y tarjeta no crean movimientos de cuenta.
- * Errores: 422 VALIDACION, 401/403 SIN_PERMISO, 404 NO_ENCONTRADO,
- * 409 FACTURA_ANULADA y 422 VALIDACION por la decisión C1.
+ * RF-V9: anula una factura (solo admin). Regla 5: no se edita ni se borra.
+ * En UNA transacción: estado anulada (regla 11), reingreso con moverStock()
+ * (regla 2) y, si fue a cuenta, crédito por el total (regla 7, decisión C1).
  */
 export async function anularFactura(
   usuario: UsuarioAutenticado,

@@ -1,25 +1,7 @@
 /**
- * Numeración correlativa de comprobantes (regla 4, decisión D3).
- *
- * ÚNICO lugar del sistema que asigna números de recibo y, en el próximo hito,
- * de factura. Usa la tabla `secuencias`, con una fila por (clave, punto de venta).
- *
- *   secuencias.ultimo_numero = ÚLTIMO número ASIGNADO (0 = todavía ninguno).
- *   El próximo disponible es ultimo_numero + 1.
- *
- * Cómo se evita que se repitan o se salteen números:
- * - asignarNumero() SOLO funciona dentro de la transacción del comprobante
- *   (recibe `tx`; nunca abre una propia). Si la transacción falla después de
- *   asignar el número, el incremento se revierte junto con todo lo demás:
- *   no se consume el número y no queda un hueco.
- * - El incremento es UNA sentencia atómica:
- *     UPDATE secuencias SET ultimo_numero = ultimo_numero + 1 ... RETURNING
- *   No se usa MAX(numero) + 1. Las transacciones de escritura abren con
- *   BEGIN IMMEDIATE (ver src/db/transaccion.ts): la segunda espera a que la
- *   primera confirme y lee el valor ya incrementado.
- * - Como última barrera, pagos y facturas tienen un índice único
- *   (punto_venta, numero): un duplicado sería un error, nunca un dato.
- *
+ * Numeración correlativa sin huecos (regla 4, decisión D3): ÚNICO lugar que asigna
+ * números de factura y de recibo, con un UPDATE atómico de `secuencias` DENTRO de
+ * la transacción del comprobante (si falla, el número no se consume).
  * Solo servidor.
  */
 import "server-only";

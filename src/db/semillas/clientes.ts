@@ -10,9 +10,8 @@
  * para la baja lógica, actualizarCliente), así pasan por las mismas
  * validaciones y normalización del documento.
  *
- * En esta etapa NO se crean movimientos de cuenta, pagos ni facturas: todos
- * los saldos quedan en 0. Las deudas de ejemplo llegarán con las ventas a
- * cuenta corriente del seed de facturas.
+ * Este seed NO crea movimientos de cuenta, pagos ni facturas: los saldos
+ * arrancan en 0 y las deudas de ejemplo las crea el seed de facturas.
  *
  * Idempotente: un cliente se busca por tipo y número normalizado de
  * documento; si ya existe NO se vuelve a crear ni se modifica.

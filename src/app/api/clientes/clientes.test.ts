@@ -5,9 +5,9 @@
  * Se llama a cada Route Handler con un NextRequest, igual que Next.js, contra
  * una base SQLite temporal (no toca local.db ni Turso).
  *
- * Como en esta etapa todavía no existen ventas ni pagos, las pruebas de saldo
- * insertan directamente facturas, pagos y movimientos_cuenta en la base de
- * prueba: así se verifica que el saldo SALE de los movimientos (regla 7).
+ * Las pruebas de saldo insertan directamente facturas, pagos y
+ * movimientos_cuenta en la base de prueba: así se verifica que el saldo SALE
+ * de los movimientos (regla 7), sin depender de los servicios de venta y pago.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

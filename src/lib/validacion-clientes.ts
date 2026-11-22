@@ -1,32 +1,7 @@
 /**
- * Esquemas de validación de clientes (RF-C1, RF-C2, RF-C3, RF-C6, RF-C7;
- * sección 11.5).
- *
- * Los usan el servicio (src/servicios/clientes.ts) para validar en el
- * servidor y las pantallas de /clientes para adelantar los mismos mensajes
- * (sección 10.8, punto 6).
- *
- * Todos son estrictos: un campo no previsto produce 422 VALIDACION. Además,
- * `saldo`, `disponible` y `nroDocNormalizado` se rechazan con un mensaje
- * explícito: el saldo se calcula desde movimientos_cuenta (regla 7) y el
- * número normalizado lo calcula el servidor.
- *
- * Convenciones de esta etapa:
- * - Documento: se guarda el número VISIBLE con formato canónico
- *   ("28.456.123", "20-28456123-4", ver formatearDocumento()) y el número
- *   NORMALIZADO, solo dígitos ("28456123"). Ambos salen de
- *   `resolverDocumento()`, el ÚNICO lugar que relaciona tipoDoc, nroDoc y
- *   nroDocNormalizado.
- * - Textos opcionales (domicilio, teléfono, email): se quitan los espacios
- *   extremos y se reducen los internos; un texto vacío se guarda como `null`.
- *   En la edición, `undefined` (campo ausente) significa «no cambiar» y
- *   `null` o "" significa «borrar».
- * - Teléfono: texto libre razonable (hasta 40 caracteres). Todavía NO se
- *   exige una cantidad de dígitos.
- * - Límite de crédito: entero en centavos ≥ 0, o `null` (sin límite). Solo
- *   tiene sentido con cuenta corriente habilitada.
- *
- * Módulo compartido: puede importarse desde el servidor y desde el cliente.
+ * Validación de clientes (RF-C1, RF-C2, RF-C3, RF-C6, RF-C7), compartida por el
+ * servicio y las pantallas. Estricta; `saldo` se rechaza (se deriva, regla 7).
+ * Teléfono: hasta 40 caracteres, sin mínimo de dígitos.
  */
 import { z } from "zod";
 

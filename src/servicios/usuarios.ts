@@ -2,8 +2,8 @@
  * Servicio de gestión de usuarios (RF-U4 y parte administrativa de RF-U5).
  *
  * No conoce HTTP, cookies ni componentes: lo usan los Route Handlers de
- * /api/usuarios y, más adelante, las Server Actions. TODAS las reglas del
- * módulo viven aquí; las rutas solo adaptan HTTP.
+ * /api/usuarios. TODAS las reglas del módulo viven aquí; las rutas solo
+ * adaptan HTTP.
  *
  * Orden de cada función (sección 10.2):
  *   1. validar la entrada con el esquema compartido;

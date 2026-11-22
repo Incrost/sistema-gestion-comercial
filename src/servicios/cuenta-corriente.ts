@@ -1,30 +1,7 @@
 /**
- * Cuenta corriente de clientes (RF-C4; reglas 7, 8 y 11; decisión C4;
- * sección 10.2: «el saldo del cliente sale de sus movimientos de cuenta»).
- *
- *   saldo = suma de débitos − suma de créditos   (en centavos, regla 7)
- *
- * El saldo NO es una columna: se deriva siempre de movimientos_cuenta. Un
- * cliente sin movimientos tiene saldo 0.
- *
- * Este módulo centraliza TODO lo de la cuenta corriente:
- * - la expresión del saldo (`saldoDelCliente`, `importeConSigno`) y
- *   `obtenerSaldo()`: listado (RF-C1), saldos (RF-C6), ficha (RF-C3), baja
- *   (RF-C7), pagos (regla 8) y, más adelante, límite de crédito (regla 7);
- * - la consulta de movimientos con `saldoAnterior` y saldo acumulado por
- *   renglón (`obtenerCuentaCorriente()`, RF-C4);
- * - la ÚNICA función que graba movimientos de cuenta
- *   (`registrarMovimientoCuenta()`, con los atajos `registrarDebito()` y
- *   `registrarCredito()`), que impide que el saldo quede negativo.
- *
- * Los movimientos se graban SIEMPRE dentro de la transacción de la operación
- * que los origina (pago, y en el próximo hito venta y anulación). No hay ruta
- * pública para crear movimientos: solo los servicios llaman a estas funciones.
- *
- * Trazabilidad (regla 11): la tabla movimientos_cuenta no tiene columna de
- * usuario; cada movimiento referencia su origen (pago o factura), que guarda
- * el usuario, y registra su propia fecha y hora.
- *
+ * Cuenta corriente (RF-C1, RF-C3, RF-C4, RF-C6; reglas 7, 8 y 11; decisión C4).
+ * Saldo DERIVADO: débitos − créditos de movimientos_cuenta (no es una columna).
+ * Los movimientos se graban solo dentro de la transacción del pago, venta o anulación.
  * Solo servidor.
  */
 import "server-only";
@@ -280,22 +257,9 @@ export type DatosMovimientoCuenta = {
 };
 
 /**
- * Graba un movimiento de cuenta DENTRO de la transacción `tx` de la operación
- * que lo origina; nunca abre una propia. Si la operación mayor falla, el
- * movimiento se revierte con ella. No se expone en ninguna ruta.
- *
- * Reglas:
- * - importe entero positivo en centavos (regla 10);
- * - exactamente un origen: factura o pago; un débito solo nace de una
- *   factura (venta a cuenta). Un pago nunca crea un débito;
- * - regla 8: un crédito no puede superar el saldo (no hay saldos a favor).
- *   El control y la inserción ocurren en la misma transacción de escritura,
- *   así que ningún otro movimiento puede colarse entre ambos.
- *   (Decisión C1, temporal: la anulación de una factura a cuenta ya pagada
- *   se RECHAZA antes de llegar aquí, en exigirAnulacionSinSaldoAFavor() de
- *   src/servicios/facturas.ts. Este control queda como última barrera.)
- *
- * Devuelve el id del movimiento y el saldo del cliente después de grabarlo.
+ * ÚNICA función que graba movimientos de cuenta, siempre DENTRO de `tx` (regla 10:
+ * centavos; un origen: factura o pago). Regla 8: el saldo nunca queda negativo;
+ * es la última barrera de la decisión C1 (ver exigirAnulacionSinSaldoAFavor()).
  */
 export async function registrarMovimientoCuenta(
   tx: Transaccion,
@@ -339,7 +303,7 @@ export async function registrarMovimientoCuenta(
   return { id, saldo };
 }
 
-/** Débito por una venta a cuenta corriente (lo usará Nueva venta, RF-V6). */
+/** Débito por una venta a cuenta corriente (RF-V6, lo usa grabarFactura()). */
 export function registrarDebito(
   tx: Transaccion,
   datos: Omit<DatosMovimientoCuenta, "tipo" | "origen"> & { facturaId: number },
@@ -348,7 +312,7 @@ export function registrarDebito(
   return registrarMovimientoCuenta(tx, { ...resto, tipo: "debito", origen: { facturaId } });
 }
 
-/** Crédito por un pago (RF-C5) o, más adelante, por la anulación de una venta (RF-V9). */
+/** Crédito por un pago (RF-C5) o por la anulación de una venta (RF-V9). */
 export function registrarCredito(
   tx: Transaccion,
   datos: Omit<DatosMovimientoCuenta, "tipo">,

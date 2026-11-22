@@ -1,23 +1,7 @@
 /**
- * Esquemas de validación de la emisión de facturas (RF-V1 a RF-V6; reglas
- * 3, 9 y 10; sección 11.6).
- *
- * Los usa el servicio de facturación (src/servicios/facturas.ts) para validar
- * en el servidor y los usará la pantalla de Nueva venta para adelantar los
- * mismos mensajes (sección 10.8, punto 6).
- *
- * Principios:
- * - TODOS los objetos son estrictos: un campo no previsto produce
- *   422 VALIDACION. Así el número completo de una tarjeta, el CVV o el
- *   vencimiento se rechazan sin código extra (regla 9, sección 10.4).
- * - El cliente envía SOLO productos, cantidades, comprador y forma de pago.
- *   Precios, subtotales, total, número, fecha, estado y vendedor los decide
- *   el servidor (sección 11.1: «Precios desde el servidor»). Esos campos se
- *   rechazan con un mensaje explícito.
- * - Cantidades e importes son enteros dentro de límites seguros: ningún
- *   cálculo puede salir del rango exacto de JavaScript (regla 10).
- *
- * Módulo compartido: puede importarse desde el servidor y desde el cliente.
+ * Validación de facturas (RF-V1 a RF-V6; reglas 3, 9 y 10), compartida por el
+ * servicio y la pantalla de Nueva venta. Objetos estrictos: número completo de
+ * tarjeta o CVV → 422 (regla 9). Precios y total los decide el servidor (11.1).
  */
 import { z } from "zod";
 

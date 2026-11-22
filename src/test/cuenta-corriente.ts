@@ -2,17 +2,17 @@
  * Ayudantes de PRUEBA para la cuenta corriente (solo bases temporales).
  *
  * El esquema exige que todo débito tenga una factura de origen
- * (movimientos_cuenta.factura_id, con clave foránea real). Como el módulo de
- * facturación todavía no existe, estas pruebas preparan una factura a cuenta
+ * (movimientos_cuenta.factura_id, con clave foránea real). Para probar la
+ * cuenta corriente aislada, estas pruebas preparan una factura a cuenta
  * corriente MÍNIMA (sin renglones ni movimientos de stock) y graban su débito
- * con registrarDebito(), la misma función que usará Nueva venta.
+ * con registrarDebito(), la misma función que usa emitirFactura().
  *
  * - La factura toma su número de la secuencia «factura» (asignarNumero).
- * - Factura y débito se graban en UNA transacción, igual que lo hará la venta.
+ * - Factura y débito se graban en UNA transacción, igual que en la venta.
  * - No se insertan identificadores falsos ni se desactivan claves foráneas.
  *
- * NO se usa en local.db ni en el seed: allí las deudas llegarán con las
- * ventas reales del próximo hito.
+ * NO se usa en local.db ni en el seed: allí las deudas salen de ventas reales
+ * (seed de facturas).
  */
 import { NUMERACION } from "@/config/comercio";
 import { facturas } from "@/db/schema";

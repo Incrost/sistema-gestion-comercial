@@ -1,11 +1,6 @@
 /**
- * Esquemas de validación BASE compartidos (consigna, sección 10.4).
- *
- * Los formularios los usan para adelantar los mensajes y los servicios para
- * validar en el servidor: así ambos lados aplican exactamente las mismas
- * reglas. Los esquemas de cada formulario (productos, clientes, facturas...)
- * se arman más adelante combinando estos bloques.
- *
+ * Esquemas de validación BASE (sección 10.4): formularios y servicios aplican las
+ * mismas reglas. Los esquemas de cada formulario (validacion-*.ts) los combinan.
  * Módulo compartido: puede importarse desde el servidor y desde el cliente.
  */
 import { z } from "zod";
