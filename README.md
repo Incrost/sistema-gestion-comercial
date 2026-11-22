@@ -370,7 +370,7 @@ Todos los nombres, documentos, domicilios y emails son ficticios.
 ## Pruebas
 
 ```bash
-pnpm run test:run        # 1025 pruebas en 51 archivos
+pnpm run test:run        # 1085 pruebas en 54 archivos
 pnpm run lint
 pnpm exec tsc --noEmit
 pnpm run build
@@ -390,10 +390,11 @@ Las pruebas usan una base SQLite temporal y no tocan `local.db`. Cubren, entre o
 - Variables de entorno a cargar en el proyecto de Vercel: `DATABASE_URL`, `DATABASE_AUTH_TOKEN` y `SESSION_SECRET` (un valor aleatorio propio, distinto del de `.env.example`).
 
 ### Base de datos en Turso
+
 - Base remota configurada y operativa.
 - Las migraciones fueron aplicadas correctamente.
 - El seed académico fue ejecutado de forma idempotente.
-- Producción utiliza Turso mediante DATABASE_URL y DATABASE_AUTH_TOKEN.
+- Producción utiliza Turso mediante `DATABASE_URL` y `DATABASE_AUTH_TOKEN`.
 
 ## Integrantes
 
@@ -443,7 +444,8 @@ Todo el código fue revisado, probado y organizado por los integrantes en commit
 - Funcionalidad completa según los requerimientos RF-V, RF-P, RF-C, RF-U y RF-T, con las 31 rutas REST.
 - Pruebas, análisis estático, verificación de tipos y compilación de producción sin errores.
 - Datos definitivos del comercio, integrantes y repositorio incorporados.
-- Pendiente: publicación en Vercel y Turso, y aclaración de la decisión C1.
+- Publicado en Vercel con la base en Turso y los datos de prueba cargados.
+- Pendiente: aclaración de la decisión C1.
 
 ## Licencia y uso académico
 
