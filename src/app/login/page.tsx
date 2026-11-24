@@ -21,6 +21,7 @@ import { Fila, Pila, Texto, Titulo } from "@/components/layout/primitivas";
 import { Marca } from "@/components/navegacion/marca";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { APLICACION } from "@/config/aplicacion";
+import { EQUIPO } from "@/config/equipo";
 import { destinoSeguro } from "@/lib/destino-seguro";
 import { obtenerUsuarioDePagina } from "@/lib/sesion-pagina";
 
@@ -63,7 +64,7 @@ export default function PaginaLogin({ searchParams }: PageProps<"/login">) {
         </Texto>
       </Pila>
 
-      <Fila as="section" justificar="center" className="relative isolate px-4 pt-6 pb-10 sm:px-8 lg:py-10">
+      <Fila as="section" justificar="center" className="relative isolate px-4 pt-6 pb-10 sm:px-8 lg:py-24">
         {/* Fondo suave solo en móvil: un degradado del color de la marca, sin imágenes. */}
         <div aria-hidden className="absolute inset-x-0 top-0 -z-10 h-72 bg-linear-to-b from-primary/12 to-transparent lg:hidden" />
         <Pila gap="lg" className="w-full max-w-sm">
@@ -93,6 +94,26 @@ export default function PaginaLogin({ searchParams }: PageProps<"/login">) {
             <LockKeyholeIcon aria-hidden className="size-3.5 shrink-0" />
             Acceso exclusivo para personal autorizado.
           </Texto>
+          {/*
+            Datos del grupo (src/config/equipo.ts). En móvil va debajo de la nota
+            de acceso, alineado a la derecha. En escritorio (lg) queda en la
+            esquina inferior derecha de la sección, que es «relative»; su lg:py-24
+            reserva el lugar para que no se superponga con la tarjeta.
+          */}
+          <Pila as="aside" aria-label="Grupo e integrantes" gap="xs" className="text-right lg:absolute lg:right-8 lg:bottom-6">
+            {/* Número de grupo, en seminegrita para que funcione como encabezado. */}
+            <Texto tamanio="xs" peso="fuerte">
+              Grupo: {EQUIPO.grupo}
+            </Texto>
+            {/* Un renglón por integrante; key identifica a cada uno ante React. */}
+            <Pila as="ul" gap="none">
+              {EQUIPO.integrantes.map((integrante) => (
+                <Texto as="li" key={integrante} tamanio="xs" tono="suave">
+                  {integrante}
+                </Texto>
+              ))}
+            </Pila>
+          </Pila>
         </Pila>
       </Fila>
     </main>
